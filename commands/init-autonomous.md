@@ -238,6 +238,95 @@ sudo apt install gh
 
 ---
 
+### 4-0. `.claude/settings.json`（プロジェクト固有の権限設定）
+
+検出したスタックに応じて、`auto` モードで確認なしに実行できるコマンドを定義する。
+**git は グローバル設定で `Bash(git *)` / `Bash(gh *)` として許可済みのため含めない。**
+
+スタック別の `allow` リストを構築してから生成する:
+
+**Node.js 系（`package.json` 検出時）:**
+```json
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run *)",
+      "Bash(npm ci)",
+      "Bash(npm install *)",
+      "Bash(npx *)",
+      "Bash(node *)",
+      "Bash(pnpm *)",
+      "Bash(yarn *)"
+    ]
+  }
+}
+```
+
+**Laravel 検出時（Node.js と共存する場合はマージ）:**
+```json
+{
+  "permissions": {
+    "allow": [
+      "Bash(php artisan *)",
+      "Bash(composer *)",
+      "Bash(./vendor/bin/pest *)",
+      "Bash(./vendor/bin/pint *)"
+    ]
+  }
+}
+```
+
+**Python 検出時:**
+```json
+{
+  "permissions": {
+    "allow": [
+      "Bash(python *)",
+      "Bash(python3 *)",
+      "Bash(pip install *)",
+      "Bash(pytest *)",
+      "Bash(ruff *)",
+      "Bash(uvicorn *)",
+      "Bash(gunicorn *)"
+    ]
+  }
+}
+```
+
+**Go 検出時:**
+```json
+{
+  "permissions": {
+    "allow": [
+      "Bash(go build *)",
+      "Bash(go test *)",
+      "Bash(go run *)",
+      "Bash(go mod *)",
+      "Bash(go vet *)"
+    ]
+  }
+}
+```
+
+**Rust 検出時:**
+```json
+{
+  "permissions": {
+    "allow": [
+      "Bash(cargo build *)",
+      "Bash(cargo test *)",
+      "Bash(cargo run *)",
+      "Bash(cargo clippy *)",
+      "Bash(cargo fmt *)"
+    ]
+  }
+}
+```
+
+複数スタック検出時は `allow` 配列をマージして1ファイルにまとめる。
+
+---
+
 ### 4-1. `CLAUDE.md`（プロジェクトルート）
 
 以下の内容で生成する。`{{ }}` 内はステップ 1・2 の収集情報で置き換える:

@@ -4,8 +4,8 @@
   },
   "permissions": {
     "allow": [
-      "Bash(git commit *)",
-      "Bash(git branch *)"
+      "Bash(git *)",
+      "Bash(gh *)"
     ],
     "defaultMode": "auto"
   },
@@ -41,7 +41,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "afplay -v 0.2 /System/Library/Sounds/Glass.aiff"
+            "command": "command -v afplay > /dev/null 2>&1 && afplay -v 0.2 /System/Library/Sounds/Glass.aiff || printf '\\a'"
           },
           {
             "type": "command",
@@ -55,7 +55,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "afplay -v 0.2 /System/Library/Sounds/Ping.aiff"
+            "command": "command -v afplay > /dev/null 2>&1 && afplay -v 0.2 /System/Library/Sounds/Ping.aiff || printf '\\a'"
           }
         ]
       }

@@ -19,12 +19,12 @@
   passwords are detected. Script: `~/.claude/hooks/secret-detection.py`
 
   ### Stop
-  - **afplay Glass.aiff**: Audio notification at session end
+  - **Audio notification**: Plays Glass.aiff on macOS (`afplay`), falls back to terminal bell (`printf '\a'`) on Linux
   - **console.log audit**: Scans all modified files for `console.log` before session ends.
   Script: `~/.claude/hooks/console-log-audit.py`
 
   ### PermissionRequest
-  - **afplay Ping.aiff**: Audio notification on permission request
+  - **Audio notification**: Plays Ping.aiff on macOS (`afplay`), falls back to terminal bell (`printf '\a'`) on Linux
 
   ## Hook Scripts
 
