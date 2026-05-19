@@ -45,23 +45,6 @@ cd ~/dotfiles/claude-config
 - `agents/`, `commands/`, `hooks/`, `rules/`, `skills/` を `~/.claude/` にコピー
 - `settings.json.template` からパスを解決して `~/.claude/settings.json` を生成
 
-## 新しいプロジェクトで自走基盤を整える
-
-グローバル設定インストール後、プロジェクトディレクトリで以下を実行します：
-
-```
-/init-autonomous
-```
-
-スタックを自動検出し、以下を一括生成します：
-- `.claude/settings.json` — スタック固有コマンドの権限設定（npm/pest/pytest/go/cargo など）
-- `CLAUDE.md` — プロジェクトルール・エンティティ・ロール定義
-- `.claude/rules/`, `.claude/commands/`, `.claude/agents/` — スタック固有の設定
-- `docs/` — 仕様書テンプレート・ADR・コードマップ
-- `.github/` — CI/CD・PRテンプレート・Issue テンプレート
-
-生成後は `docs/01_product-specifications.md` と `docs/02_detailed-design.md` を記入することで、エージェントが Issue 番号から PR 作成まで全自動で動く状態になります。
-
 ## 使い方
 
 ### パターン1: 既存プロジェクトへの導入
@@ -73,7 +56,12 @@ cd ~/dotfiles/claude-config
 /init-autonomous
 ```
 
-スタックを自動検出し、`.claude/`・`CLAUDE.md`・`docs/`・`.github/` を一括生成します。
+スタックを自動検出し、以下を一括生成します：
+- `.claude/settings.json` — スタック固有コマンドの権限設定（npm/pest/pytest/go/cargo など）
+- `CLAUDE.md` — プロジェクトルール・エンティティ・ロール定義
+- `.claude/rules/`, `.claude/commands/`, `.claude/agents/` — スタック固有の設定
+- `docs/` — 仕様書テンプレート・ADR・コードマップ
+- `.github/` — CI/CD・PRテンプレート・Issue テンプレート
 
 ```
 # ステップ2: 生成された docs/ に既存資料を反映
