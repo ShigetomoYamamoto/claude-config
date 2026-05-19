@@ -1,6 +1,6 @@
 ---
 name: planner
-description: Implementation planning specialist. Use PROACTIVELY when implementing a feature or refactor within an existing, defined design context. Comes AFTER architect (if design work was needed). Creates step-by-step implementation plans with file paths, actions, dependencies, and risks — but writes NO code.
+description: Implementation planning specialist. Use PROACTIVELY when implementing a feature or refactor within an existing design. Creates step-by-step plans with file paths, actions, dependencies, and risks — writes NO code.
 tools: Read, Grep, Glob
 model: opus
 ---

@@ -14,17 +14,10 @@ Before ANY commit:
 
 ## Secret Management
 
-```typescript
-// NEVER: Hardcoded secrets
-const apiKey = "sk-proj-xxxxx"
-
-// ALWAYS: Environment variables
-const apiKey = process.env.OPENAI_API_KEY
-
-if (!apiKey) {
-  throw new Error('OPENAI_API_KEY not configured')
-}
-```
+- NEVER hardcode secrets (API keys, passwords, tokens) in source files
+- ALWAYS load secrets from environment variables
+- Validate required env vars at startup and fail fast with a clear error if missing
+- Add `.env` and credential files to `.gitignore`
 
 ## Security Response Protocol
 

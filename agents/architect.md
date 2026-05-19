@@ -1,6 +1,6 @@
 ---
 name: architect
-description: Software architecture specialist for requirements definition, system design, and technical decision-making. Use when starting a new project, designing a new feature that requires DB schema / API contract decisions, or making major architectural choices. Comes BEFORE planner — architect defines WHAT and HOW the system is structured; planner defines the step-by-step implementation.
+description: Software architecture specialist for requirements definition, system design, and technical decision-making. Use when starting a new project, or designing features that require DB schema, API contract, or major tech-stack decisions. Runs before planner.
 tools: Read, Grep, Glob
 model: opus
 ---

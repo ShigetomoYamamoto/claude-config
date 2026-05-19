@@ -2,23 +2,7 @@
 
 ## Immutability (CRITICAL)
 
-ALWAYS create new objects, NEVER mutate:
-
-```javascript
-// WRONG: Mutation
-function updateUser(user, name) {
-  user.name = name  // MUTATION!
-  return user
-}
-
-// CORRECT: Immutability
-function updateUser(user, name) {
-  return {
-    ...user,
-    name
-  }
-}
-```
+ALWAYS create new objects, NEVER mutate. Use spread operators, `Object.assign`, or library helpers (e.g., immer) to derive new state.
 
 ## File Organization
 
@@ -31,31 +15,14 @@ MANY SMALL FILES > FEW LARGE FILES:
 ## Error Handling
 
 ALWAYS handle errors comprehensively:
-
-```typescript
-try {
-  const result = await riskyOperation()
-  return result
-} catch (error) {
-  console.error('Operation failed:', error)
-  throw new Error('Detailed user-friendly message')
-}
-```
+- Catch errors at boundaries (API handlers, async tasks)
+- Log with sufficient context for debugging
+- Re-throw with user-friendly messages
+- Never swallow errors silently
 
 ## Input Validation
 
-ALWAYS validate user input:
-
-```typescript
-import { z } from 'zod'
-
-const schema = z.object({
-  email: z.string().email(),
-  age: z.number().int().min(0).max(150)
-})
-
-const validated = schema.parse(input)
-```
+ALWAYS validate user input at system boundaries (API endpoints, form submissions, external data). Use schema validation libraries (zod, yup, joi) over manual checks.
 
 ## Code Quality Checklist
 
