@@ -45,7 +45,11 @@ if os.path.exists(claude_path):
     with open(claude_path) as f:
         claude = json.load(f)
 
-claude["mcpServers"] = mcp.get("mcpServers", {})
+existing = claude.get("mcpServers", {})
+for key, value in mcp.get("mcpServers", {}).items():
+    if key not in existing:
+        existing[key] = value
+claude["mcpServers"] = existing
 
 with open(claude_path, "w") as f:
     json.dump(claude, f, indent=2)
