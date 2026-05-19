@@ -63,11 +63,12 @@ cd ~/dotfiles/claude-config
 - `docs/` — 仕様書テンプレート・ADR・コードマップ
 - `.github/` — CI/CD・PRテンプレート・Issue テンプレート
 
-```
-# ステップ2: 生成された docs/ に既存資料を反映
-docs/01_product-specifications.md  ← 仕様書の内容を記入
-docs/02_detailed-design.md         ← 設計書の内容を記入
-```
+**ステップ2: 既存資料を Claude に読み込ませる**
+
+2つの方法があります：
+
+- **生成されたテンプレートを使う場合**: `docs/01_product-specifications.md`・`docs/02_detailed-design.md` に既存資料の内容を記入する
+- **既存ファイルをそのまま使う場合**: 生成された `CLAUDE.md` の参照パスを既存ファイルのパスに書き換える
 
 ここまで完了すると、Claude が仕様・設計・コードベースを把握した状態になります。以降は通常の開発フローで進めます。
 
