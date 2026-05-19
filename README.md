@@ -20,7 +20,7 @@ Claude Code のグローバル設定を管理する dotfiles リポジトリ。
 | ディレクトリ/ファイル | 内容 |
 |---|---|
 | `agents/` | 9体のカスタムエージェント（planner, tdd-guide, code-reviewer, security-reviewer など） |
-| `commands/` | スラッシュコマンド（/init-autonomous, /plan, /tdd, /commit, /create-pr など） |
+| `commands/` | スラッシュコマンド（/design, /plan, /tdd, /commit, /create-pr, /init-autonomous など） |
 | `hooks/` | 品質ガードフック（console.log 警告・シークレット検出・セッション終了監査） |
 | `rules/` | コーディングスタイル、テスト要件、セキュリティ、エージェント運用ガイドライン |
 | `skills/` | 参照ドキュメント（フロントエンド/バックエンドパターン、git-workflow など） |
