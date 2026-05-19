@@ -71,6 +71,11 @@ description: |
 
 5. **特に避けたいライブラリや制約**（なければスキップ）
 
+6. **既存の仕様書・設計書**（なければスキップ）
+   - 既存資料がある場合はファイルパスを教えてください
+   - 例: `仕様書: docs/spec.md、設計書: docs/architecture.md`
+   - 複数ある場合はすべて列挙してください
+
 収集した情報を以下の変数として保持する（以降のステップで参照）:
 - `PROJECT_NAME`: プロジェクト名（スラッグ形式）
 - `PROJECT_DESCRIPTION`: 一行説明
@@ -78,6 +83,7 @@ description: |
 - `USER_ROLES`: ロール構成（なければ「認証なし」）
 - `TEST_FRAMEWORK`: 確定したテストフレームワーク
 - `CONSTRAINTS`: 制約事項（なければ空）
+- `EXISTING_DOCS`: 既存資料のパスと内容の種別（なければ空）
 
 ---
 
@@ -336,6 +342,7 @@ sudo apt install gh
 
 ## ドキュメント
 
+{{ EXISTING_DOCS が空の場合 }}
 | ファイル | 内容 |
 |---------|------|
 | `docs/01_product-specifications.md` | 目的・ユーザー・画面一覧・画面遷移 |
@@ -346,6 +353,16 @@ sudo apt install gh
 | `docs/CODEMAPS/` | ファイル責務一覧 |
 
 **実装前に必ず `docs/01_product-specifications.md` と `docs/02_detailed-design.md` を読むこと。**
+
+{{ EXISTING_DOCS がある場合（既存資料のパスと種別をそのまま列挙） }}
+| ファイル | 内容 |
+|---------|------|
+| `{{ EXISTING_DOCS の各パスを行として展開 }}` | {{ 種別 }} |
+| `docs/conventions.md` | 命名規則・コーディング規約 |
+| `docs/adr/` | 設計上の重要判断の記録 |
+| `docs/CODEMAPS/` | ファイル責務一覧 |
+
+**実装前に必ず上記ドキュメントを読むこと。**
 
 ## 技術スタック
 
@@ -1111,6 +1128,20 @@ model: claude-sonnet-4-6
 ---
 
 ### 4-5. `docs/` ディレクトリ構造
+
+**`EXISTING_DOCS` がある場合の処理:**
+
+既存資料のパスが指定されている場合、そのファイルを読み込んで内容を把握した上で以下を行う：
+
+- 仕様書に相当する資料 → `docs/01_product-specifications.md` に内容を転記（または `CLAUDE.md` の参照パスを既存ファイルに書き換え）
+- 設計書に相当する資料 → `docs/02_detailed-design.md` に内容を転記（または同様に参照パスを書き換え）
+- `docs/03_technical-requirements.md`・`docs/conventions.md` は既存資料から読み取れる情報を元に生成する
+
+いずれの方法を取るかはファイル構成の状況に応じて判断し、ユーザーに確認してから進める。
+
+**`EXISTING_DOCS` がない場合の処理:**
+
+以下のテンプレートを生成する。
 
 #### `docs/01_product-specifications.md`
 
