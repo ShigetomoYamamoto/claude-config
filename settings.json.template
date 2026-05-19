@@ -5,7 +5,9 @@
   "permissions": {
     "allow": [
       "Bash(git *)",
-      "Bash(gh *)"
+      "Bash(gh *)",
+      "Bash(claude *)",
+      "Bash(curl *)"
     ],
     "defaultMode": "auto"
   },
@@ -62,10 +64,7 @@
     ]
   },
   "enabledPlugins": {
-    "slack@claude-plugins-official": true,
-    "postman@claude-plugins-official": true,
-    "supabase@claude-plugins-official": true,
-    "vercel@claude-plugins-official": true
+    "slack@claude-plugins-official": true
   },
   "extraKnownMarketplaces": {
     "claude-code-plugins": {
