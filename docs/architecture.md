@@ -1,0 +1,187 @@
+# claude-config アーキテクチャ
+
+## 概要
+
+claude-config は Claude Code のグローバル設定を管理する dotfiles リポジトリ。「人間の開発業務を Claude Code が肩代わり・サポートする」という上位目的を実現するための土台・基盤を提供する。
+
+詳細な要件は [`requirements.md`](./requirements.md) を参照。
+
+---
+
+## 5レイヤー構造
+
+```
+┌────────────────────────────────────────────────────────────┐
+│                  claude-config（このリポジトリ）             │
+│  ┌────────────────────────────────────────────────────┐    │
+│  │ Layer 1: Behavior（ふるまいの定義）                  │    │
+│  │   rules/   — 不変ルール（英語）                       │    │
+│  │   skills/  — 再利用可能な参照知識                     │    │
+│  └────────────────────────────────────────────────────┘    │
+│  ┌────────────────────────────────────────────────────┐    │
+│  │ Layer 2: Workforce（実行者）                         │    │
+│  │   agents/    — 専門役の人格定義（英語）               │    │
+│  │   commands/  — スラッシュコマンド（日本語）           │    │
+│  └────────────────────────────────────────────────────┘    │
+│  ┌────────────────────────────────────────────────────┐    │
+│  │ Layer 3: Guardrails（受動的な強制）                  │    │
+│  │   hooks/    — PreToolUse / PostToolUse / Stop        │    │
+│  └────────────────────────────────────────────────────┘    │
+│  ┌────────────────────────────────────────────────────┐    │
+│  │ Layer 4: Wiring（接続設定）                          │    │
+│  │   settings.json.template — Claude Code 本体設定      │    │
+│  │   mcp.json               — 外部ツール接続            │    │
+│  └────────────────────────────────────────────────────┘    │
+│  ┌────────────────────────────────────────────────────┐    │
+│  │ Layer 5: Installer                                   │    │
+│  │   setup.sh — 冪等な配布スクリプト                     │    │
+│  └────────────────────────────────────────────────────┘    │
+└────────────────────────────────────────────────────────────┘
+                            │ setup.sh
+                            ▼
+┌────────────────────────────────────────────────────────────┐
+│                     ~/.claude/                              │
+│  agents/ commands/ rules/ skills/ hooks/ settings.json      │
+└────────────────────────────────────────────────────────────┘
+                            │ /init-autonomous（プロジェクト内）
+                            ▼
+┌────────────────────────────────────────────────────────────┐
+│              <project>/.claude/                             │
+│  プロジェクト固有 rules / commands / agents                 │
+│  + docs/ + .github/ + CLAUDE.md                             │
+└────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 各レイヤーの責務
+
+### Layer 1: Behavior
+
+| ディレクトリ | 責務 | 対象読者 | 言語 |
+|---|---|---|---|
+| `rules/` | 不変の振る舞いルール。エージェントが必ず守るべき制約 | エージェント（自動参照） | 英語 |
+| `skills/` | 再利用可能な参照知識（パターン・サンプル・コマンド例） | エージェント（必要時に参照） | 英語 |
+
+**境界:**
+- `rules/` = 「MUST / NEVER / ALWAYS」を含む規範的記述
+- `skills/` = 「HOW TO（手順・サンプル）」中心の参照資料
+- 同じ内容を両方に書かない。`rules/` から `skills/` を参照する形に統一
+
+### Layer 2: Workforce
+
+| ディレクトリ | 責務 | 起動方法 | 言語 |
+|---|---|---|---|
+| `agents/` | 専門役の人格定義（architect / planner / tdd-guide ほか） | Claude が自動 or commands から起動 | 英語 |
+| `commands/` | ユーザーが起動するスラッシュコマンド | ユーザーが `/コマンド` で起動 | 日本語 |
+
+**設計原則:**
+- 1 コマンド = 1 つの主要エージェントへの委譲（薄いオーケストレーション層）
+- agents は単独で機能するように自己完結する記述
+- commands は agents への入力整形と前提条件チェックに集中する
+
+### Layer 3: Guardrails
+
+| hook | タイミング | 責務 |
+|---|---|---|
+| `doc-blocker.py` | PreToolUse(Write) | 許可リスト外の `.md` / `.txt` 新規作成を阻止 |
+| `secret-detection.py` | PostToolUse(Edit / Write / MultiEdit) | API キー・PAT・JWT のハードコード検出 |
+| （新規） git-destructive-blocker | PreToolUse(Bash) | `git push --force` / `reset --hard` / `clean -fd` を防止 |
+| （新規） pr-base-checker | PreToolUse(Bash) | `gh pr create` の base が `develop` 以外でブロック |
+| （新規） mass-delete-blocker | PreToolUse(Bash) | `rm -rf` / 大量ファイル削除を確認 |
+
+**設計原則:**
+- フックは「Claude が忘れたときの保険」
+- 単一責務（1 ファイル 1 検査）
+- 予期せぬエラーは `exit 0` で Claude を止めない
+- 意図的なブロック（doc-blocker など）のみ `exit 2`
+- ネットワーク通信禁止・ローカル処理のみ
+- 上限 100 行
+
+### Layer 4: Wiring
+
+| ファイル | 責務 |
+|---|---|
+| `settings.json.template` | Claude Code 本体設定（permissions・hooks 配線・enabledPlugins・model） |
+| `mcp.json` | MCP サーバー定義（GitHub / Playwright / Figma） |
+
+**設計原則:**
+- `settings.json.template` は人がレビュー可能な単一の真実の源
+- `__HOME__` のような Templating はパス系のみ
+- `mcp.json` のマージは追加のみ。既存キーは保護
+
+### Layer 5: Installer
+
+`setup.sh` の責務:
+
+1. 必須ツールの事前検証（preflight check）
+2. 設定ディレクトリの同期（`rm -rf` + `cp -r` による冪等コピー）
+3. `settings.json` の生成（sed によるパス置換）
+4. `mcp.json` のマージ（Python による既存保護つきマージ）
+
+**設計原則:**
+- すべての操作を idempotent に保つ
+- 何を書いたかを stdout で逐次表示
+- 失敗時は即座に停止（`set -euo pipefail`）。どのステップまで成功したかを表示
+
+---
+
+## 2層境界（グローバル / プロジェクト）
+
+| 層 | 場所 | 内容 |
+|---|---|---|
+| グローバル | `~/.claude/`（このリポジトリ） | スタック非依存・全プロジェクト共通の仕組み |
+| プロジェクト | `<project>/.claude/` | スタック固有の実装（デプロイ先・ビルドコマンド・言語別 hook） |
+
+**プロジェクト側は `/init-autonomous` で生成される。** スタック自動検出後、検出言語に応じた hook（デバッグ出力検知など）を生成する。
+
+---
+
+## 拡張ポイント
+
+### 新しいマシンへの対応
+
+```bash
+git clone <repo> ~/dotfiles/claude-config
+# Keychain / libsecret に GITHUB_PERSONAL_ACCESS_TOKEN を登録
+cd ~/dotfiles/claude-config
+./setup.sh
+```
+
+### 新エージェントを追加
+
+1. `agents/<name>.md` を作成（YAML フロントマター + 英語の人格定義）
+2. 必要なら `commands/<name>.md` を作成（日本語の薄いラッパー）
+3. `rules/agents.md` のトリガー表に追記（自動起動が必要な場合）
+4. コミット → 他マシンで `git pull && setup.sh`
+
+### 新コマンドを追加
+
+1. `commands/<name>.md` を作成（YAML フロントマター + 日本語）
+2. 必要なら対応するエージェントを `agents/<name>.md` に作成
+3. README の「使い方」セクションに記載
+4. コミット → 他マシンで `git pull && setup.sh`
+
+### 新 hook を追加
+
+1. `hooks/<name>.py` を作成（100 行以下・単一責務）
+2. `settings.json.template` の `hooks` セクションに配線追加
+3. コミット → 他マシンで `git pull && setup.sh`
+
+### 新 MCP を追加
+
+1. `mcp.json` の `mcpServers` に追記
+2. README の前提条件セクションに必要なツールを追記
+3. コミット → 他マシンで `git pull && setup.sh`（既存設定は壊さない）
+
+---
+
+## エラーハンドリング戦略
+
+| 失敗パターン | 期待動作 |
+|---|---|
+| `setup.sh` 実行中に Python3 が見つからない | 即停止し、インストール手順を案内（preflight check） |
+| `~/.claude.json` が JSON として壊れている | マージを中止、エラー表示。既存ファイルは触らない |
+| hook 内 Python の予期せぬ例外 | exit 0 で Claude を止めない |
+| `GITHUB_PERSONAL_ACCESS_TOKEN` 未設定 | setup.sh では検知のみ。MCP 起動時に Docker 側が失敗 |
+| MCP マージ時の同名キー衝突 | 既存値を尊重し追加しない |
