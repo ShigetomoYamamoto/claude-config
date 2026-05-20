@@ -21,8 +21,8 @@ Claude Code のグローバル設定を管理する dotfiles リポジトリ。
 |---|---|
 | `agents/` | 9体のカスタムエージェント（architect, planner, tdd-guide, code-reviewer, security-reviewer など） |
 | `commands/` | 15個のスラッシュコマンド（/design, /plan, /tdd, /commit, /create-pr, /init-autonomous など） |
-| `hooks/` | 品質ガードフック（console.log 警告・シークレット検出・セッション終了監査） |
-| `rules/` | コーディングスタイル、テスト要件、セキュリティ、エージェント運用ガイドライン |
+| `hooks/` | 品質ガードフック（シークレット検出・不要ドキュメント生成のブロック） |
+| `rules/` | コーディングスタイル、テスト要件、セキュリティ、エージェント運用ガイドライン、Claude 使用効率化 |
 | `skills/` | 参照スキル（git-workflow, tdd-workflow, security-review） |
 | `settings.json.template` | Claude Code 設定テンプレート（パス自動解決・プラグイン有効化設定を含む） |
 | `mcp.json` | MCP サーバー設定（GitHub / Playwright / Figma） |
@@ -33,7 +33,7 @@ Claude Code のグローバル設定を管理する dotfiles リポジトリ。
 - `Bash(git *)` / `Bash(gh *)` — どのプロジェクトでも git/gh 操作が確認なしで動作
 - `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: 1` — 複数エージェントの並列実行を有効化
 - `enabledPlugins` — Slack プラグインを自動有効化
-- フック: Stop 時に音声通知（macOS: afplay / Linux: terminal bell）+ console.log 監査
+- フック: Stop 時に音声通知（macOS: afplay / Linux: terminal bell）
 
 ## 新しいマシンへのインストール
 
@@ -60,17 +60,38 @@ open -a Docker  # Docker Desktop を起動
 
 #### GitHub Personal Access Token の設定
 
-シェル設定ファイル（`~/.zshrc` 等）に追記：
+PAT は OS 標準の Keychain / Keyring に保存し、`~/.zprofile` で環境変数に展開する方式を採用します。シェル設定ファイル（dotfiles）にトークンを残さないためです。
+
+**macOS**
 
 ```bash
-export GITHUB_PERSONAL_ACCESS_TOKEN=ghp_xxxxxxxxxxxx
+security add-generic-password -a "$USER" -s "github-pat" -w "ghp_xxxx"
 ```
 
-セキュリティ上の推奨：
+`~/.zprofile` に追記：
+
+```bash
+export GITHUB_PERSONAL_ACCESS_TOKEN="$(security find-generic-password -a "$USER" -s "github-pat" -w)"
+```
+
+**Linux（GUI 環境前提）**
+
+```bash
+sudo apt install libsecret-tools   # または sudo dnf install libsecret
+secret-tool store --label="github-pat" service github-pat
+```
+
+`~/.zprofile` に追記：
+
+```bash
+export GITHUB_PERSONAL_ACCESS_TOKEN="$(secret-tool lookup service github-pat)"
+```
+
+**運用ルール**
 
 - **Fine-grained PAT** を使い、必要なリポジトリ・スコープのみに限定する
 - **有効期限を 30〜90 日** に設定して定期的にローテーションする
-- 1Password CLI など秘密管理ツールを併用する場合は `export GITHUB_PERSONAL_ACCESS_TOKEN=$(op read "op://...")` のように動的に取得する
+- `.git/config` に `username:token@` 形式で直書きしない（混入したら即除去）
 
 ### インストール
 
@@ -216,3 +237,34 @@ git pull
 
 新しい MCP サーバーを追加した場合は `mcp.json` に追記して `setup.sh` を再実行してください。  
 新しいプラグインを有効化した場合は `settings.json.template` の `enabledPlugins` に追記してください。
+
+## 拡張方法
+
+新しいエージェント・コマンド・hook・MCP を追加する手順です。追加後は他マシンで `git pull && setup.sh` を実行すれば反映されます。
+
+### 新エージェントを追加
+
+1. `agents/<name>.md` を作成（YAML フロントマター + 英語の人格定義・300 行以内）
+2. 必要なら `commands/<name>.md` を作成（日本語の薄いラッパー）
+3. `rules/agents.md` のトリガー表に追記（自動起動が必要な場合）
+
+### 新コマンドを追加
+
+1. `commands/<name>.md` を作成（YAML フロントマター + 日本語・500 行以内）
+2. 必要なら対応するエージェントを `agents/<name>.md` に作成
+3. README の「使い方」セクションに記載
+
+### 新 hook を追加
+
+1. `hooks/<name>.py` を作成（100 行以下・単一責務）
+2. `settings.json.template` の `hooks` セクションに配線追加
+
+設計原則：
+- 予期せぬエラーは `exit 0`（Claude を止めない）
+- 意図的ブロックのみ `exit 2`
+- ネットワーク通信禁止（ローカル処理のみ）
+
+### 新 MCP を追加
+
+1. `mcp.json` の `mcpServers` に追記
+2. README の前提条件セクションに必要なツールを追記
