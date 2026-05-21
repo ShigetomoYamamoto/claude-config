@@ -35,7 +35,7 @@ Include specific examples of how to fix issues.
 
 - Hardcoded credentials (API keys, passwords, tokens)
 - SQL injection risks (string concatenation in queries)
-- XSS vulnerabilities (unescaped user input)
+- XSS vulnerabilities (unescaped user input in HTML output)
 - Missing input validation
 - Insecure dependencies (outdated, vulnerable)
 - Path traversal risks (user-controlled file paths)
@@ -47,27 +47,23 @@ Include specific examples of how to fix issues.
 - Large functions (>50 lines)
 - Large files (>800 lines)
 - Deep nesting (>4 levels)
-- Missing error handling (try/catch)
-- console.log statements
+- Missing error handling
+- Debug output statements left in code
 - Mutation patterns
 - Missing tests for new code
 
 ## Performance (MEDIUM)
 
 - Inefficient algorithms (O(n²) when O(n log n) possible)
-- Unnecessary re-renders in React
-- Missing memoization
-- Large bundle sizes
-- Unoptimized images
-- Missing caching
+- Unnecessary repeated computation (missing caching or memoization)
+- Large payload or bundle sizes
 - N+1 queries
 
 ## Best Practices (MEDIUM)
 
-- Emoji usage in code/comments
-- TODO/FIXME without tickets
-- Missing JSDoc for public APIs
-- Accessibility issues (missing ARIA labels, poor contrast)
+- TODO/FIXME without issue references
+- Missing documentation for public APIs
+- Accessibility issues
 - Poor variable naming (x, tmp, data)
 - Magic numbers without explanation
 - Inconsistent formatting
@@ -77,12 +73,9 @@ Include specific examples of how to fix issues.
 For each issue:
 ```
 [CRITICAL] Hardcoded API key
-File: src/api/client.ts:42
+File: src/api/client:42
 Issue: API key exposed in source code
 Fix: Move to environment variable
-
-const apiKey = "sk-abc123";  // ❌ Bad
-const apiKey = process.env.API_KEY;  // ✓ Good
 ```
 
 ## Approval Criteria
@@ -91,14 +84,9 @@ const apiKey = process.env.API_KEY;  // ✓ Good
 - ⚠️ Warning: MEDIUM issues only (can merge with caution)
 - ❌ Block: CRITICAL or HIGH issues found
 
-## Project-Specific Guidelines (Example)
+## Project-Specific Guidelines
 
-Add your project-specific checks here. Examples:
-- Follow MANY SMALL FILES principle (200-400 lines typical)
-- No emojis in codebase
-- Use immutability patterns (spread operator)
-- Verify database RLS policies
-- Check AI integration error handling
-- Validate cache fallback behavior
-
-Customize based on your project's `CLAUDE.md` or skill files.
+Add project-specific checks in `CLAUDE.md` or `.claude/rules/`. Examples:
+- Language-specific anti-patterns to avoid
+- Framework-specific best practices
+- Domain-specific validation rules

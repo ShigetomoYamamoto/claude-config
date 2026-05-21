@@ -21,474 +21,172 @@ This skill ensures all code follows security best practices and identifies poten
 
 ### 1. Secrets Management
 
-#### ❌ NEVER Do This
-```typescript
-const apiKey = "sk-proj-xxxxx"  // Hardcoded secret
-const dbPassword = "password123" // In source code
-```
+#### ❌ NEVER
+- Hardcode API keys, passwords, or tokens in source files
+- Commit `.env` files with real secrets
+- Store credentials in version-controlled configuration files
 
-#### ✅ ALWAYS Do This
-```typescript
-const apiKey = process.env.OPENAI_API_KEY
-const dbUrl = process.env.DATABASE_URL
+#### ✅ ALWAYS
+- Load secrets from environment variables
+- Fail fast with a clear error if a required secret is missing
+- Add `.env` and credential files to `.gitignore`
+- Store production secrets in the hosting platform's secret manager
 
-// Verify secrets exist
-if (!apiKey) {
-  throw new Error('OPENAI_API_KEY not configured')
-}
-```
-
-#### Verification Steps
+#### Verification
 - [ ] No hardcoded API keys, tokens, or passwords
-- [ ] All secrets in environment variables
-- [ ] `.env.local` in .gitignore
+- [ ] All secrets loaded from environment variables
+- [ ] `.env` files in `.gitignore`
 - [ ] No secrets in git history
-- [ ] Production secrets in hosting platform (Vercel, Railway)
 
 ### 2. Input Validation
 
-#### Always Validate User Input
-```typescript
-import { z } from 'zod'
-
-// Define validation schema
-const CreateUserSchema = z.object({
-  email: z.string().email(),
-  name: z.string().min(1).max(100),
-  age: z.number().int().min(0).max(150)
-})
-
-// Validate before processing
-export async function createUser(input: unknown) {
-  try {
-    const validated = CreateUserSchema.parse(input)
-    return await db.users.create(validated)
-  } catch (error) {
-    if (error instanceof z.ZodError) {
-      return { success: false, errors: error.errors }
-    }
-    throw error
-  }
-}
-```
+#### Principles
+- Validate all user input at system boundaries (API endpoints, form submissions)
+- Use schema validation libraries available in the project's language
+- Whitelist allowed values rather than blacklisting forbidden ones
+- Error messages must not reveal internal structure
 
 #### File Upload Validation
-```typescript
-function validateFileUpload(file: File) {
-  // Size check (5MB max)
-  const maxSize = 5 * 1024 * 1024
-  if (file.size > maxSize) {
-    throw new Error('File too large (max 5MB)')
-  }
+- Check file size (enforce a maximum)
+- Check MIME type against an allowlist
+- Check file extension against an allowlist
+- Store uploads outside the web root or in object storage
 
-  // Type check
-  const allowedTypes = ['image/jpeg', 'image/png', 'image/gif']
-  if (!allowedTypes.includes(file.type)) {
-    throw new Error('Invalid file type')
-  }
+#### Verification
+- [ ] All user inputs validated with a schema or explicit checks
+- [ ] File uploads restricted by size, type, and extension
+- [ ] No user input passed directly to queries or shell commands
+- [ ] Error messages do not leak sensitive information
 
-  // Extension check
-  const allowedExtensions = ['.jpg', '.jpeg', '.png', '.gif']
-  const extension = file.name.toLowerCase().match(/\.[^.]+$/)?.[0]
-  if (!extension || !allowedExtensions.includes(extension)) {
-    throw new Error('Invalid file extension')
-  }
+### 3. Injection Prevention
 
-  return true
-}
-```
+#### SQL / NoSQL Injection
+- ALWAYS use parameterized queries or the ORM's query builder
+- NEVER concatenate user input into query strings
 
-#### Verification Steps
-- [ ] All user inputs validated with schemas
-- [ ] File uploads restricted (size, type, extension)
-- [ ] No direct use of user input in queries
-- [ ] Whitelist validation (not blacklist)
-- [ ] Error messages don't leak sensitive info
+#### Command Injection
+- NEVER pass user input directly to shell commands
+- Use language-native libraries instead of spawning shell processes
 
-### 3. SQL Injection Prevention
-
-#### ❌ NEVER Concatenate SQL
-```typescript
-// DANGEROUS - SQL Injection vulnerability
-const query = `SELECT * FROM users WHERE email = '${userEmail}'`
-await db.query(query)
-```
-
-#### ✅ ALWAYS Use Parameterized Queries
-```typescript
-// Safe - parameterized query
-const { data } = await supabase
-  .from('users')
-  .select('*')
-  .eq('email', userEmail)
-
-// Or with raw SQL
-await db.query(
-  'SELECT * FROM users WHERE email = $1',
-  [userEmail]
-)
-```
-
-#### Verification Steps
-- [ ] All database queries use parameterized queries
-- [ ] No string concatenation in SQL
-- [ ] ORM/query builder used correctly
-- [ ] Supabase queries properly sanitized
+#### Verification
+- [ ] All database queries use parameterized queries or ORM
+- [ ] No string concatenation in queries
+- [ ] No shell command execution with user-controlled input
 
 ### 4. Authentication & Authorization
 
-#### JWT Token Handling
-```typescript
-// ❌ WRONG: localStorage (vulnerable to XSS)
-localStorage.setItem('token', token)
+#### Token Handling
+- Store session tokens in httpOnly, Secure, SameSite=Strict cookies (not in client-accessible storage)
+- Validate tokens on every protected request
+- Use short expiry times with refresh token rotation
 
-// ✅ CORRECT: httpOnly cookies
-res.setHeader('Set-Cookie',
-  `token=${token}; HttpOnly; Secure; SameSite=Strict; Max-Age=3600`)
-```
+#### Authorization
+- Check permissions before every sensitive operation
+- Verify the requesting user owns or has access to the requested resource
+- Apply the principle of least privilege
 
-#### Authorization Checks
-```typescript
-export async function deleteUser(userId: string, requesterId: string) {
-  // ALWAYS verify authorization first
-  const requester = await db.users.findUnique({
-    where: { id: requesterId }
-  })
+#### Database-Level Access Control
+- Enable row-level security if supported by the database
+- Never expose database credentials to client-side code
 
-  if (requester.role !== 'admin') {
-    return NextResponse.json(
-      { error: 'Unauthorized' },
-      { status: 403 }
-    )
-  }
-
-  // Proceed with deletion
-  await db.users.delete({ where: { id: userId } })
-}
-```
-
-#### Row Level Security (Supabase)
-```sql
--- Enable RLS on all tables
-ALTER TABLE users ENABLE ROW LEVEL SECURITY;
-
--- Users can only view their own data
-CREATE POLICY "Users view own data"
-  ON users FOR SELECT
-  USING (auth.uid() = id);
-
--- Users can only update their own data
-CREATE POLICY "Users update own data"
-  ON users FOR UPDATE
-  USING (auth.uid() = id);
-```
-
-#### Verification Steps
-- [ ] Tokens stored in httpOnly cookies (not localStorage)
-- [ ] Authorization checks before sensitive operations
-- [ ] Row Level Security enabled in Supabase
+#### Verification
+- [ ] Tokens stored securely (httpOnly cookies or equivalent)
+- [ ] Authorization checked before every sensitive operation
+- [ ] Database access control policies enabled
 - [ ] Role-based access control implemented
-- [ ] Session management secure
 
 ### 5. XSS Prevention
 
-#### Sanitize HTML
-```typescript
-import DOMPurify from 'isomorphic-dompurify'
+- Sanitize user-provided HTML before rendering (use a sanitization library)
+- Prefer safe text rendering over raw HTML injection
+- Set Content-Security-Policy headers
+- Rely on framework-native escaping (most modern frameworks escape by default)
 
-// ALWAYS sanitize user-provided HTML
-function renderUserContent(html: string) {
-  const clean = DOMPurify.sanitize(html, {
-    ALLOWED_TAGS: ['b', 'i', 'em', 'strong', 'p'],
-    ALLOWED_ATTR: []
-  })
-  return <div dangerouslySetInnerHTML={{ __html: clean }} />
-}
-```
-
-#### Content Security Policy
-```typescript
-// next.config.js
-const securityHeaders = [
-  {
-    key: 'Content-Security-Policy',
-    value: `
-      default-src 'self';
-      script-src 'self' 'unsafe-eval' 'unsafe-inline';
-      style-src 'self' 'unsafe-inline';
-      img-src 'self' data: https:;
-      font-src 'self';
-      connect-src 'self' https://api.example.com;
-    `.replace(/\s{2,}/g, ' ').trim()
-  }
-]
-```
-
-#### Verification Steps
-- [ ] User-provided HTML sanitized
+#### Verification
+- [ ] User-provided HTML sanitized before rendering
 - [ ] CSP headers configured
-- [ ] No unvalidated dynamic content rendering
-- [ ] React's built-in XSS protection used
+- [ ] Framework's built-in escaping used
 
 ### 6. CSRF Protection
 
-#### CSRF Tokens
-```typescript
-import { csrf } from '@/lib/csrf'
+- Use CSRF tokens on state-changing requests (POST, PUT, DELETE, PATCH)
+- Set SameSite=Strict on session cookies
+- Verify Origin/Referer headers on sensitive state-changing endpoints
 
-export async function POST(request: Request) {
-  const token = request.headers.get('X-CSRF-Token')
-
-  if (!csrf.verify(token)) {
-    return NextResponse.json(
-      { error: 'Invalid CSRF token' },
-      { status: 403 }
-    )
-  }
-
-  // Process request
-}
-```
-
-#### SameSite Cookies
-```typescript
-res.setHeader('Set-Cookie',
-  `session=${sessionId}; HttpOnly; Secure; SameSite=Strict`)
-```
-
-#### Verification Steps
+#### Verification
 - [ ] CSRF tokens on state-changing operations
-- [ ] SameSite=Strict on all cookies
-- [ ] Double-submit cookie pattern implemented
+- [ ] SameSite=Strict on session cookies
 
 ### 7. Rate Limiting
 
-#### API Rate Limiting
-```typescript
-import rateLimit from 'express-rate-limit'
+- Apply rate limiting on all API endpoints
+- Apply stricter limits on sensitive operations (authentication, search, financial actions)
+- Rate limit per IP and per authenticated user
 
-const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // 100 requests per window
-  message: 'Too many requests'
-})
-
-// Apply to routes
-app.use('/api/', limiter)
-```
-
-#### Expensive Operations
-```typescript
-// Aggressive rate limiting for searches
-const searchLimiter = rateLimit({
-  windowMs: 60 * 1000, // 1 minute
-  max: 10, // 10 requests per minute
-  message: 'Too many search requests'
-})
-
-app.use('/api/search', searchLimiter)
-```
-
-#### Verification Steps
+#### Verification
 - [ ] Rate limiting on all API endpoints
-- [ ] Stricter limits on expensive operations
-- [ ] IP-based rate limiting
-- [ ] User-based rate limiting (authenticated)
+- [ ] Stricter limits on sensitive operations
+- [ ] Per-user rate limiting for authenticated endpoints
 
 ### 8. Sensitive Data Exposure
 
 #### Logging
-```typescript
-// ❌ WRONG: Logging sensitive data
-console.log('User login:', { email, password })
-console.log('Payment:', { cardNumber, cvv })
+- Never log passwords, tokens, API keys, or PII
+- Redact or mask sensitive fields before logging
+- Return generic error messages to users; log details server-side only
 
-// ✅ CORRECT: Redact sensitive data
-console.log('User login:', { email, userId })
-console.log('Payment:', { last4: card.last4, userId })
-```
+#### Error Handling
+- Do not return stack traces or internal error details to clients
 
-#### Error Messages
-```typescript
-// ❌ WRONG: Exposing internal details
-catch (error) {
-  return NextResponse.json(
-    { error: error.message, stack: error.stack },
-    { status: 500 }
-  )
-}
+#### Verification
+- [ ] No sensitive data in logs
+- [ ] Generic error messages for users
+- [ ] No stack traces exposed to clients
 
-// ✅ CORRECT: Generic error messages
-catch (error) {
-  console.error('Internal error:', error)
-  return NextResponse.json(
-    { error: 'An error occurred. Please try again.' },
-    { status: 500 }
-  )
-}
-```
+### 9. Dependency Security
 
-#### Verification Steps
-- [ ] No passwords, tokens, or secrets in logs
-- [ ] Error messages generic for users
-- [ ] Detailed errors only in server logs
-- [ ] No stack traces exposed to users
+- Run the language-appropriate dependency audit tool (npm audit, pip-audit, cargo audit, govulncheck, etc.)
+- Fix high/critical vulnerabilities before merging
+- Commit lock files and use them in CI for reproducible builds
+- Enable automated dependency updates (Dependabot or equivalent)
 
-### 9. Blockchain Security (Solana)
-
-#### Wallet Verification
-```typescript
-import { verify } from '@solana/web3.js'
-
-async function verifyWalletOwnership(
-  publicKey: string,
-  signature: string,
-  message: string
-) {
-  try {
-    const isValid = verify(
-      Buffer.from(message),
-      Buffer.from(signature, 'base64'),
-      Buffer.from(publicKey, 'base64')
-    )
-    return isValid
-  } catch (error) {
-    return false
-  }
-}
-```
-
-#### Transaction Verification
-```typescript
-async function verifyTransaction(transaction: Transaction) {
-  // Verify recipient
-  if (transaction.to !== expectedRecipient) {
-    throw new Error('Invalid recipient')
-  }
-
-  // Verify amount
-  if (transaction.amount > maxAmount) {
-    throw new Error('Amount exceeds limit')
-  }
-
-  // Verify user has sufficient balance
-  const balance = await getBalance(transaction.from)
-  if (balance < transaction.amount) {
-    throw new Error('Insufficient balance')
-  }
-
-  return true
-}
-```
-
-#### Verification Steps
-- [ ] Wallet signatures verified
-- [ ] Transaction details validated
-- [ ] Balance checks before transactions
-- [ ] No blind transaction signing
-
-### 10. Dependency Security
-
-#### Regular Updates
-```bash
-# Check for vulnerabilities
-npm audit
-
-# Fix automatically fixable issues
-npm audit fix
-
-# Update dependencies
-npm update
-
-# Check for outdated packages
-npm outdated
-```
-
-#### Lock Files
-```bash
-# ALWAYS commit lock files
-git add package-lock.json
-
-# Use in CI/CD for reproducible builds
-npm ci  # Instead of npm install
-```
-
-#### Verification Steps
-- [ ] Dependencies up to date
-- [ ] No known vulnerabilities (npm audit clean)
+#### Verification
+- [ ] Dependency audit clean (no high/critical CVEs)
 - [ ] Lock files committed
-- [ ] Dependabot enabled on GitHub
-- [ ] Regular security updates
+- [ ] Automated dependency updates enabled
 
 ## Security Testing
 
-### Automated Security Tests
-```typescript
-// Test authentication
-test('requires authentication', async () => {
-  const response = await fetch('/api/protected')
-  expect(response.status).toBe(401)
-})
+Write automated tests covering security properties:
 
-// Test authorization
-test('requires admin role', async () => {
-  const response = await fetch('/api/admin', {
-    headers: { Authorization: `Bearer ${userToken}` }
-  })
-  expect(response.status).toBe(403)
-})
-
-// Test input validation
-test('rejects invalid input', async () => {
-  const response = await fetch('/api/users', {
-    method: 'POST',
-    body: JSON.stringify({ email: 'not-an-email' })
-  })
-  expect(response.status).toBe(400)
-})
-
-// Test rate limiting
-test('enforces rate limits', async () => {
-  const requests = Array(101).fill(null).map(() =>
-    fetch('/api/endpoint')
-  )
-
-  const responses = await Promise.all(requests)
-  const tooManyRequests = responses.filter(r => r.status === 429)
-
-  expect(tooManyRequests.length).toBeGreaterThan(0)
-})
+```
+# Authentication: unauthenticated request returns 401
+# Authorization: insufficient role returns 403
+# Validation: invalid input returns 400 with safe error message
+# Rate limit: exceeding limit returns 429
 ```
 
-## Pre-Deployment Security Checklist
+## Pre-Deployment Checklist
 
-Before ANY production deployment:
-
-- [ ] **Secrets**: No hardcoded secrets, all in env vars
-- [ ] **Input Validation**: All user inputs validated
-- [ ] **SQL Injection**: All queries parameterized
-- [ ] **XSS**: User content sanitized
-- [ ] **CSRF**: Protection enabled
-- [ ] **Authentication**: Proper token handling
-- [ ] **Authorization**: Role checks in place
-- [ ] **Rate Limiting**: Enabled on all endpoints
-- [ ] **HTTPS**: Enforced in production
-- [ ] **Security Headers**: CSP, X-Frame-Options configured
-- [ ] **Error Handling**: No sensitive data in errors
-- [ ] **Logging**: No sensitive data logged
-- [ ] **Dependencies**: Up to date, no vulnerabilities
-- [ ] **Row Level Security**: Enabled in Supabase
-- [ ] **CORS**: Properly configured
-- [ ] **File Uploads**: Validated (size, type)
-- [ ] **Wallet Signatures**: Verified (if blockchain)
+- [ ] No hardcoded secrets
+- [ ] All inputs validated
+- [ ] Parameterized queries only
+- [ ] XSS protection in place
+- [ ] CSRF protection enabled
+- [ ] Authentication verified on every protected route
+- [ ] Authorization checks in place
+- [ ] Rate limiting enabled
+- [ ] HTTPS enforced
+- [ ] Security headers configured (CSP, HSTS, X-Frame-Options)
+- [ ] Error handling does not expose internals
+- [ ] No sensitive data in logs
+- [ ] Dependencies free of high/critical CVEs
 
 ## Resources
 
 - [OWASP Top 10](https://owasp.org/www-project-top-ten/)
-- [Next.js Security](https://nextjs.org/docs/security)
-- [Supabase Security](https://supabase.com/docs/guides/auth)
-- [Web Security Academy](https://portswigger.net/web-security)
+- [OWASP Cheat Sheet Series](https://cheatsheetseries.owasp.org/)
 
 ---
 
-**Remember**: Security is not optional. One vulnerability can compromise the entire platform. When in doubt, err on the side of caution.
+**Remember**: Security is not optional. Validate, sanitize, authenticate, authorize — at every boundary.
