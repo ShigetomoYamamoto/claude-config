@@ -274,87 +274,60 @@ PYEOF
 検出したスタックに応じて、`auto` モードで確認なしに実行できるコマンドを定義する。
 **git は グローバル設定で `Bash(git *)` / `Bash(gh *)` として許可済みのため含めない。**
 
-スタック別の `allow` リストを構築してから生成する:
+以下の python3 コマンドで生成する（複数スタック検出時は `allow` 配列を自動マージ）:
 
-**Node.js 系（`package.json` 検出時）:**
-```json
-{
-  "permissions": {
-    "allow": [
-      "Bash(npm run *)",
-      "Bash(npm ci)",
-      "Bash(npm install *)",
-      "Bash(npx *)",
-      "Bash(node *)",
-      "Bash(pnpm *)",
-      "Bash(yarn *)"
-    ]
-  }
+```bash
+python3 << 'PYEOF'
+import json, os
+
+# 検出されたスタックに応じてコメントアウトを解除する
+STACK_PERMISSIONS = {
+    # "nodejs": [  # package.json 検出時
+    #     "Bash(npm run *)", "Bash(npm ci)", "Bash(npm install *)",
+    #     "Bash(npx *)", "Bash(node *)", "Bash(pnpm *)", "Bash(yarn *)",
+    # ],
+    # "laravel": [  # composer.json + artisan 検出時
+    #     "Bash(php artisan *)", "Bash(composer *)",
+    #     "Bash(./vendor/bin/pest *)", "Bash(./vendor/bin/pint *)",
+    # ],
+    # "python": [  # requirements.txt / pyproject.toml 検出時
+    #     "Bash(python *)", "Bash(python3 *)", "Bash(pip install *)",
+    #     "Bash(pytest *)", "Bash(ruff *)", "Bash(uvicorn *)", "Bash(gunicorn *)",
+    # ],
+    # "go": [  # go.mod 検出時
+    #     "Bash(go build *)", "Bash(go test *)", "Bash(go run *)",
+    #     "Bash(go mod *)", "Bash(go vet *)",
+    # ],
+    # "rust": [  # Cargo.toml 検出時
+    #     "Bash(cargo build *)", "Bash(cargo test *)", "Bash(cargo run *)",
+    #     "Bash(cargo clippy *)", "Bash(cargo fmt *)",
+    # ],
 }
+
+path = ".claude/settings.json"
+os.makedirs(".claude", exist_ok=True)
+existing = {}
+if os.path.exists(path):
+    with open(path) as f:
+        existing = json.load(f)
+
+current_allow = existing.get("permissions", {}).get("allow", [])
+new_allow = [p for perms in STACK_PERMISSIONS.values() for p in perms]
+merged = list(dict.fromkeys(current_allow + new_allow))  # 重複除去・順序保持
+
+if "permissions" not in existing:
+    existing["permissions"] = {}
+existing["permissions"]["allow"] = merged
+existing["defaultMode"] = "auto"
+
+with open(path, "w") as f:
+    json.dump(existing, f, indent=2)
+
+print(f"✓ .claude/settings.json を更新しました（allow: {len(merged)} 件）")
+PYEOF
 ```
 
-**Laravel 検出時（Node.js と共存する場合はマージ）:**
-```json
-{
-  "permissions": {
-    "allow": [
-      "Bash(php artisan *)",
-      "Bash(composer *)",
-      "Bash(./vendor/bin/pest *)",
-      "Bash(./vendor/bin/pint *)"
-    ]
-  }
-}
-```
-
-**Python 検出時:**
-```json
-{
-  "permissions": {
-    "allow": [
-      "Bash(python *)",
-      "Bash(python3 *)",
-      "Bash(pip install *)",
-      "Bash(pytest *)",
-      "Bash(ruff *)",
-      "Bash(uvicorn *)",
-      "Bash(gunicorn *)"
-    ]
-  }
-}
-```
-
-**Go 検出時:**
-```json
-{
-  "permissions": {
-    "allow": [
-      "Bash(go build *)",
-      "Bash(go test *)",
-      "Bash(go run *)",
-      "Bash(go mod *)",
-      "Bash(go vet *)"
-    ]
-  }
-}
-```
-
-**Rust 検出時:**
-```json
-{
-  "permissions": {
-    "allow": [
-      "Bash(cargo build *)",
-      "Bash(cargo test *)",
-      "Bash(cargo run *)",
-      "Bash(cargo clippy *)",
-      "Bash(cargo fmt *)"
-    ]
-  }
-}
-```
-
-複数スタック検出時は `allow` 配列をマージして1ファイルにまとめる。
+**実行前に検出スタックに合わせてコメントアウトを解除すること。**
 
 ---
 
@@ -1859,24 +1832,36 @@ indent_style = tab
 
 #### `.claude/settings.json` への配線追加
 
-既存の `.claude/settings.json` に `hooks.PostToolUse` セクションを追加（または既存にマージ）:
+既存の `.claude/settings.json` に `hooks.PostToolUse` セクションを追加（または既存にマージ）する。以下の python3 コマンドを実行:
 
-```json
-{
-  "hooks": {
-    "PostToolUse": [
-      {
-        "matcher": "Edit|Write|MultiEdit",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "python3 .claude/hooks/debug-output-detector.py"
-          }
-        ]
-      }
-    ]
-  }
+```bash
+python3 << 'PYEOF'
+import json, os
+
+path = ".claude/settings.json"
+os.makedirs(".claude", exist_ok=True)
+existing = {}
+if os.path.exists(path):
+    with open(path) as f:
+        existing = json.load(f)
+
+new_hook = {
+    "matcher": "Edit|Write|MultiEdit",
+    "hooks": [{"type": "command", "command": "python3 .claude/hooks/debug-output-detector.py"}]
 }
+
+hooks = existing.setdefault("hooks", {})
+post_tool = hooks.setdefault("PostToolUse", [])
+
+matchers = [h.get("matcher") for h in post_tool]
+if new_hook["matcher"] not in matchers:
+    post_tool.append(new_hook)
+
+with open(path, "w") as f:
+    json.dump(existing, f, indent=2)
+
+print("✓ .claude/settings.json に hooks を追加しました")
+PYEOF
 ```
 
 #### `.claude/hooks/debug-output-detector.py`
