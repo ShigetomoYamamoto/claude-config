@@ -1,82 +1,91 @@
-# Autorun Flow — 宣言的フロー定義（自走の遷移表）
+# Autorun Flow — Declarative Flow Definition (the autonomous transition table)
 
-`/autorun`（インタープリタ）が読む、フロー全体の「形」の単一の正。実行ロジックは持たず、
-**どのフェーズを・どの順で・どこで止まるか**だけを宣言する。フェーズの中身は既存のコマンド /
-エージェント / スキルが担う（部品の再利用）。安全規律の正本は `rules/loop-safety.md`。
+The single source of truth for the *shape* of the full pipeline, read by the
+`/autorun` interpreter. It holds no execution logic — only **which phases run, in
+what order, and where to stop**. Each phase's body is handled by existing commands /
+agents / skills (parts are reused). The safety norm of record is `rules/loop-safety.md`.
 
-## モード表（2モード = 起点とゴールのパラメータ違い）
+## Modes (two modes = a difference of start/goal parameters)
 
-| モード | 起点(start) | 最初のフェーズ | ゴール(goal) |
-|--------|-------------|----------------|--------------|
-| full-auto | 自由形式の目標 | requirements | deploy |
-| support | 具体タスク / Issue | analyze-task | pr |
+| Mode | start | first phase | goal |
+|------|-------|-------------|------|
+| full-auto | a free-form objective | requirements | deploy |
+| support | a concrete task / Issue | analyze-task | pr |
 
-両モードは別物ではなく、同じ遷移表に与える起点・ゴールのパラメータ違い。
+The two modes are not separate engines — the same transition table is given
+different start/goal parameters.
 
-## フェーズ遷移表
+## Phase transition table
 
-| phase_id | 実行部品 | kind | success_test（機械的に判定） | full-auto next | support next |
-|----------|----------|------|------------------------------|----------------|-------------|
-| requirements | requirements-analyst | **gate** | 人間が要件を承認 | design | — |
-| analyze-task | task-analyst | auto | 分解結果と受け入れ基準が出力された | plan | plan |
-| design | architect | **gate**（スキップ可） | 人間が設計を承認 | plan | plan |
-| plan | planner | auto | 計画にファイルパスと手順が揃う | tdd | tdd |
-| tdd | `skills/loop-engineering/`（ミクロ層に委譲） | auto | テスト/lint/型チェック pass かつカバレッジ80%+（Bash 実測） | verify | verify |
-| verify | `/review-loop`（委譲） | auto | reviewer が NO_ISSUES かつ機械チェック pass | commit | commit |
-| commit | `/commit` | auto（※） | code-reviewer CRITICAL/HIGH=0 かつ secret-detection pass | pr | pr |
-| pr | `/create-pr` | **gate** | 人間が PR を承認（push/PR は gh 経由） | migrate | （ゴール） |
-| migrate | `/migrate` | auto（破壊的変更は確認） | マイグレーション成功 | deploy | — |
-| deploy | `/deploy` | **gate** | 人間がデプロイを承認 | （ゴール） | — |
+| phase_id | execution part | kind | success_test (decided mechanically) | full-auto next | support next |
+|----------|----------------|------|-------------------------------------|----------------|-------------|
+| requirements | requirements-analyst | **gate** | human approves the requirements | design | — |
+| analyze-task | task-analyst | auto | breakdown + acceptance criteria produced | plan | plan |
+| design | architect | **gate** (skippable) | human approves the design | plan | plan |
+| plan | planner | auto | the plan has file paths and ordered steps | tdd | tdd |
+| tdd | `skills/loop-engineering/` (delegated to the micro layer) | auto | tests/lint/typecheck pass and coverage 80%+ (measured via Bash) | verify | verify |
+| verify | `/review-loop` (delegated) | auto | reviewer returns NO_ISSUES and mechanical checks pass | commit | commit |
+| commit | `/commit` | auto (※) | code-reviewer CRITICAL/HIGH=0 and secret-detection passes | pr | pr |
+| pr | `/create-pr` | **gate** | human approves the PR (push/PR via gh) | migrate | (goal) |
+| migrate | `/migrate` | auto (destructive changes confirmed) | migration succeeds | deploy | — |
+| deploy | `/deploy` | **gate** | human approves the deploy | (goal) | — |
 
-※ commit は kind=auto だが、`/autorun` 起動時に利用者から「自動コミット包括承認」を1回取得していることが前提（`rules/git-workflow.md` の自走時例外）。メッセージは毎回トランスクリプトに提示する。包括承認が無い場合は commit を gate 扱いにする。
+※ commit is kind=auto only because `/autorun` obtained a one-time blanket approval
+for auto-commits at startup (`rules/git-workflow.md` autonomous-run exception). The
+message is shown in the transcript every time. Without that approval, treat commit as a gate.
 
-## 関門（kind=gate、人間が必ず確認）
+## Gates (kind=gate, the human always confirms)
 
-- **requirements** — 機械判定できない方向性（要件の妥当性）。手戻りが最大。
-- **design** — 同上（アーキテクチャ判断）。ただし下記スキップ条件を満たせば gate ごとスキップ。
-- **pr** — `git push` を伴う外向き不可逆。
-- **deploy** — 本番反映の不可逆。
+- **requirements** — direction that cannot be judged mechanically (are the requirements right?). Largest rework cost.
+- **design** — same (architecture decisions). May be skipped if the skip condition below holds.
+- **pr** — outward-facing, irreversible (`git push`).
+- **deploy** — irreversible production change.
 
-不可逆操作の停止点（pr / deploy / migrate の破壊的変更）の規範は `rules/loop-safety.md` が正本。
+The norm for irreversible stop points (pr / deploy / migrate destructive changes) is `rules/loop-safety.md`.
 
-## design スキップ判定（入力は requirements フェーズの成果）
+## design skip decision (input = the requirements phase output)
 
-design に到達した時点では plan 未実行のため、**requirements の成果物**を入力に判定する。
-requirements-analyst に「新規DBスキーマ / 新API / 技術選定 / システム境界の変更」の要否フラグを
-出させ、すべて不要なら design gate をスキップして plan へ自動遷移する（誤って停止/スキップしない）。
+When design is reached, plan has not run yet, so judge from the **requirements
+output**. Have requirements-analyst emit a "needs new DB schema / new API / tech
+selection / system-boundary change?" flag; if all are unnecessary, skip the design
+gate and auto-advance to plan (don't stop or skip by mistake).
 
-## 機械検証可能性の前倒し（起動時）
+## Mechanical verifiability check (at startup)
 
-`/autorun` 起動時に、通る全 auto フェーズの success_test がこのプロジェクトで機械検証可能か
-（test / lint / typecheck コマンドの実在）を Bash で検出する。1つでも検出不能なら
-「自走不可・不足を報告」して早期停止する（走り出してから腰砕けを防ぐ）。
+At `/autorun` startup, detect via Bash whether every auto phase's success_test is
+mechanically verifiable in this project (existence of test / lint / typecheck
+commands). If any is undetectable, stop early with "cannot self-run — reporting
+what's missing" (avoid stalling mid-run).
 
-## 止まってよい場所のホワイトリスト
+## Whitelist of places it may stop
 
-自走が停止してよいのは以下のみ。これ以外で止まったら**定義違反**として検知・報告する:
+An autonomous run may stop ONLY at:
 
-1. 関門4点（requirements / design / pr / deploy）
-2. ハードストップ到達（下記・二層）
-3. フェーズ内リトライ上限
-4. ゴール到達（full-auto=deploy / support=pr）
-5. 起動時の Precondition 不足 / 機械検証不能による早期停止
-6. 不可逆操作の確認（migrate の DROP/RENAME 等、`rules/loop-safety.md` が定義する不可逆操作全般）
-7. 回復不能エラー（build-error-resolver の上限到達など）
+1. The four gates (requirements / design / pr / deploy)
+2. A hard stop (below, two-layer)
+3. A per-phase retry cap
+4. Goal reached (full-auto=deploy / support=pr)
+5. Startup precondition / verifiability failure (early stop)
+6. Irreversible-op confirmation (migrate DROP/RENAME etc., all irreversible ops defined in `rules/loop-safety.md`)
+7. Unrecoverable error (e.g. build-error-resolver hitting its cap)
 
-## ハードストップ（二層）
+Stopping anywhere else is a definition violation — detect and report it.
 
-- **フェーズ内予算**: verify=5ラウンド、tdd=ミクロ層（loop-engineering）の内部上限。各フェーズ既定。
-- **全行程予算**: 総フェーズ遷移回数の上限 ＋ `rules/loop-safety.md` のセッション全体上限（既定 20ターン/30分）。フェーズ内予算と全行程予算は独立で、いずれか先に到達した方で停止する。
+## Hard stop (two-layer)
 
-## 単発実行時（RUN_STATE 未宣言）
+- **Per-phase budget**: verify=5 rounds, tdd=the micro layer (loop-engineering) internal cap. Per-phase default.
+- **Whole-run budget**: a total transition-count cap + the session ceiling in `rules/loop-safety.md` (default 20 turns / 30 min). The per-phase and whole-run budgets are independent; whichever is hit first stops the run.
 
-各コマンドを直接（`/requirements` 等）呼んだ場合は本フロー定義は適用されず、**各コマンド従来の
-案内停止**に落ちる。自走（autorun 文脈で RUN_STATE が宣言されている）時のみ本定義の kind が効く。
+## Single-command use (RUN_STATE not declared)
 
-## 関連
+When a command is invoked directly (`/requirements` etc.), this flow definition does
+not apply and each command falls back to its **conventional guided stop**. The kind
+values here take effect only in an autonomous run (where RUN_STATE is declared).
 
-- `commands/autorun.md` — 本定義を解釈するインタープリタ
-- `rules/loop-safety.md` — 安全規律の正本（ハードストップ・ゴールドリフト・不可逆操作）
-- `docs/adr/007-autonomous-loop-execution.md` — 関門4点の決定
-- `docs/adr/008-orchestration-declarative-flow.md` — 宣言的フロー方式と commit 包括承認の決定
-- `skills/loop-engineering/SKILL.md` — tdd フェーズの実装部品（ミクロ層）
+## Related
+
+- `commands/autorun.md` — the interpreter that reads this definition
+- `rules/loop-safety.md` — the safety norm of record (hard stop / goal drift / irreversible ops)
+- `docs/adr/007-autonomous-loop-execution.md` — the four-gate decision
+- `docs/adr/008-orchestration-declarative-flow.md` — the declarative-flow decision and commit blanket approval
+- `skills/loop-engineering/SKILL.md` — the tdd phase's execution part (micro layer)
