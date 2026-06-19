@@ -28,8 +28,10 @@ Claude Code のグローバル設定を管理する dotfiles リポジトリ。
 | `skills/` | 参照スキル（loop-engineering, 3-line-contract, git-workflow, tdd-workflow, security-review） |
 | `workflows/` | オーケストレーション用 Workflow テンプレート（loop-engineering-large-A: 大規模Aの計画→赤確認→実装→検証） |
 | `docs/` | 要件定義・アーキテクチャ・ADR |
-| `settings.json.template` | Claude Code 設定テンプレート（パス自動解決・プラグイン有効化を含む） |
+| `settings.json.template` | Claude Code 設定テンプレート（パス自動解決・プラグイン有効化を含む。構造マージのベース） |
 | `mcp.json` | MCP サーバー設定（GitHub / Playwright / Figma） |
+| `install.py` | インストーラ本体（静的ディレクトリの symlink 化・settings.json の構造マージ・mcp マージ。`--dry-run` 対応） |
+| `setup.sh` | `install.py` を呼ぶ薄いラッパー（後方互換用） |
 
 ## ループ自走（Loop Engineering）運用
 
@@ -73,8 +75,8 @@ Claude Code のグローバル設定を管理する dotfiles リポジトリ。
 
 | ツール | 最低バージョン | 備考 |
 |---|---|---|
-| bash | 3.2+ | macOS デフォルト |
-| python3 | 3.8+ | `setup.sh` と hook 用 |
+| python3 | 3.8+ | `install.py`（インストーラ本体）と hook 用 |
+| bash | 3.2+ | `setup.sh` ラッパー用（`python3 install.py` を直接呼べば不要） |
 | git | 2.0+ | |
 | Docker | 20.0+ | GitHub MCP 用（推奨） |
 
@@ -134,12 +136,29 @@ cd ~/dotfiles/claude-config
 ./setup.sh
 ```
 
-`setup.sh` は以下を行います：
+`setup.sh` は実体は `install.py` を呼ぶ薄いラッパーです（JSON マージと symlink は bash に不向きなため）。`python3 install.py` を直接実行しても同じです。`--dry-run` を付けると**何も書き込まずに**変更内容だけ表示します。
 
-1. **preflight check** — 必須ツール（bash・python3・git・docker）のバージョン確認
-2. `agents/`, `commands/`, `hooks/`, `rules/`, `skills/`, `workflows/` を `~/.claude/` にコピー
-3. `settings.json.template` からパスを解決して `~/.claude/settings.json` を生成
-4. `mcp.json` の MCP サーバー設定を `~/.claude.json` にマージ（既存設定は保持し、不足分のみ追加）
+```bash
+./setup.sh --dry-run   # 変更計画を確認（書き込みなし）
+./setup.sh             # 適用
+```
+
+以下を行います：
+
+1. **preflight check** — 必須ツール（python3・git・docker）の確認
+2. `agents/`, `commands/`, `hooks/`, `rules/`, `skills/`, `workflows/` を `~/.claude/` に **シンボリックリンク**（repo を編集すれば即 live に反映。実体ディレクトリがあれば `~/.claude/.backup/` に退避してからリンク化）
+3. `settings.json` を **構造マージ**（下記）。`settings.json.template` のパスを解決して反映するが、**既存の設定は決して破壊しない**
+4. `mcp.json` の MCP サーバー設定を `~/.claude.json` にマージ（既存は保持、不足分のみ追加）
+
+書き込み前に置換対象を `~/.claude/.backup/<timestamp>/` にバックアップします。
+
+#### settings.json の構造マージ規則
+
+`~/.claude/settings.json` は repo 管理の配線と、Claude が実行時に書き込む個人設定（`/effort`・`/model`・通知音など）が同居するため、丸ごと上書きすると個人設定が消えます（過去に通知設定が消えた原因）。そこでキー単位で、次の **2規則** だけでマージします：
+
+- **FORCE（repo が勝つ＝更新が伝播）**：`hooks.PreToolUse` / `hooks.PostToolUse`（blocker 群）、`permissions.allow`（和集合）、`env`、`enabledPlugins`、`extraKnownMarketplaces`。template の値が live に反映される（配線を消したい場合は template 側を空にする。template が無言なら live はそのまま）
+- **DEFAULT（live に無い時だけ template から補う。live に値があれば常に live が勝つ＝通知が残る理由）**：上記以外（`hooks.Stop` / `PermissionRequest` / `Notification`、`model`、`effortLevel` など）
+- live に存在するキーは決して削除しない。書き込み前に必ずバックアップ
 
 各ステップは `[1/4] ✓ ...` 形式で進捗表示します。失敗時はどのステップまで成功したかを表示します。
 
@@ -234,10 +253,12 @@ docs/02_detailed-design.md         ← /design の詳細設計
 
 ## 別マシンで最新の設定を取得するとき
 
+`agents/`・`commands/`・`rules/`・`skills/`・`hooks/`・`workflows/` は symlink なので **`git pull` だけで即反映**されます。`settings.json.template` や `mcp.json` を変更したときだけ `./setup.sh` を再実行してください。
+
 ```bash
 cd ~/dotfiles/claude-config
 git pull
-./setup.sh
+./setup.sh   # settings.json.template / mcp.json を変えたときのみ必要
 ```
 
 ## MCP・プラグインの管理
@@ -252,7 +273,7 @@ git pull
 
 ## 拡張方法
 
-新しいエージェント・コマンド・hook・workflow・MCP を追加する手順です。追加後は他マシンで `git pull && setup.sh` を実行すれば反映されます。
+新しいエージェント・コマンド・hook・workflow・MCP を追加する手順です。`agents/`・`commands/`・`rules/`・`skills/`・`hooks/`・`workflows/` は symlink のため、追加後は他マシンで `git pull` するだけで反映されます（`settings.json.template` や `mcp.json` を変えた場合のみ `setup.sh` を再実行）。
 
 ### 新エージェントを追加
 
@@ -281,7 +302,7 @@ git pull
 
 1. `workflows/<name>.js` を作成（Workflow ツールで起動できる JS。`meta` 必須、mode 分岐・引数バリデーションを持たせる）
 2. 起動元のスキル / コマンド（例: `skills/loop-engineering/SKILL.md`）から参照を追記
-3. コミット → 他マシンで `git pull && setup.sh`（`setup.sh` が `workflows/` を無条件コピーするため配線追加は不要）
+3. コミット → 他マシンで `git pull`（`workflows/` は symlink なので即反映。settings 側の配線追加は不要）
 
 ### 新 MCP を追加
 
