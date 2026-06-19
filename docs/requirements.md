@@ -114,14 +114,16 @@
 
 ### E. マルチマシン同期
 
+> 方式は ADR-009（symlink + 構造マージ）に従う。実装本体は `install.py`、`setup.sh` はその薄いラッパー。
+
 | 項目 | 内容 |
 |---|---|
-| 設定ディレクトリのコピー | `setup.sh`（`agents/` `commands/` `hooks/` `rules/` `skills/` `workflows/`） |
-| Claude Code 設定生成 | `setup.sh`（`settings.json.template` → `~/.claude/settings.json`） |
-| MCP 設定マージ | `setup.sh`（`mcp.json` → `~/.claude.json`、不足分のみ追加） |
-| 事前検証（preflight check） | `setup.sh` に追加（必須ツールが無ければ案内して exit） |
-| `settings.json` のバックアップ | 実装しない |
-| dry-run モード | 実装しない |
+| 設定ディレクトリの配置 | `install.py`（`agents/` `commands/` `hooks/` `rules/` `skills/` `workflows/` を repo への symlink。`git pull` で即反映） |
+| Claude Code 設定生成 | `install.py`（`settings.json.template` → `~/.claude/settings.json` を FORCE/DEFAULT の2規則で構造マージ。live キーは削除しない） |
+| MCP 設定マージ | `install.py`（`mcp.json` → `~/.claude.json`、不足分のみ追加） |
+| 事前検証（preflight check） | `install.py`（必須ツールが無ければ案内して exit） |
+| バックアップ | 破壊的操作の前に `~/.claude/.backup/<timestamp>/` へ退避 |
+| dry-run モード | `--dry-run`（何も書き込まず変更計画を表示） |
 | マシン固有設定 | 環境変数のみで管理（現状維持） |
 
 ---

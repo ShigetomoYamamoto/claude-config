@@ -1,8 +1,10 @@
 # ADR-004: setup.sh はコピー型（シンボリックリンク非採用）
 
-**ステータス**: accepted
+**ステータス**: superseded by [ADR-009](009-symlink-and-settings-merge.md)（2026-06-19）
 
 **日付**: 2026-05-21
+
+> ⚠️ この決定は ADR-009 により置き換えられました。コピー型（`rm -rf` + `cp -r` + `settings.json` 丸ごと上書き）は、(1) `~/.claude` 配下のユーザー設定を確認なく削除する、(2) Claude が実行時に書き込む `settings.json`（通知・`/effort`・`/model` 等）を上書きして消す、という2つの問題を抱えていました。現行方式は ADR-009 を参照してください。
 
 ## コンテキスト
 
