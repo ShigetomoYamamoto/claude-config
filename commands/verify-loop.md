@@ -9,6 +9,8 @@ description: |
 
 `code-reviewer` / `security-reviewer` の「CRITICAL が 0 になるまで繰り返す」を、人間の判断を挟まずに回す。検出 → 検証 → 修正を `Workflow` のパイプラインで自律実行する。
 
+> **位置づけ（`/review-loop` との使い分け）:** コード1タスクの通常の磨き込みは層1の **`/review-loop`**（reviewer/fixer）に委譲する（autorun の verify フェーズもこれ）。本コマンドは **反証的多数決検証つきの上位変種**で、セキュリティ重視・誤検知を厳しく排除したい時にだけ使う。
+
 ## 前提（`rules/loop-safety.md` 準拠）
 
 `rules/loop-safety.md` の Preconditions をすべて満たすこと。本コマンド固有の定義:
@@ -22,7 +24,7 @@ description: |
 各ラウンドで以下を回す:
 
 1. **Review（検出）** — 変更ファイルを `code-reviewer` と `security-reviewer` で並列レビューし、指摘を severity 付きで集約する。
-2. **Verify（検証）** — 各 CRITICAL / HIGH 指摘を独立エージェントで反証的に検証する（「本当に問題か / 誤検知では」）。過半数が「実在」とした指摘だけ残す。
+2. **Verify（検証）** — 各 CRITICAL / HIGH 指摘を**独立した3エージェント**で反証的に検証する（「本当に問題か / 誤検知では」）。**3中2以上**が「実在」とした指摘だけ残す。検証エージェントは read-only（修正と同時実行しないため worktree 隔離は不要）。
 3. **Fix（修正）** — 残った指摘を最小差分で修正する（build-error-resolver の方針）。
 4. **再判定** — テスト / lint / 型チェックを実行する。
 
