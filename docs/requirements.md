@@ -134,7 +134,7 @@
 
 | 項目 | 内容 |
 |---|---|
-| `setup.sh` 失敗時 | 即停止し、どのステップまで成功したかを表示 |
+| `install.py`（`setup.sh` 経由）失敗時 | 即停止し、どのステップまで成功したかを表示 |
 | `mcp.json` マージ | 不足分追加方式（既存設定を破壊しない） |
 | hook の予期せぬエラー | exit 0 で Claude の動作を止めない |
 | 意図的なブロック | `doc-blocker.py` のみ exit 2 |
@@ -146,7 +146,7 @@
 | 対応 OS | macOS / Linux（Windows は対象外） |
 | Linux | GUI 環境前提（`secret-tool` / libsecret 利用） |
 | パス区切り文字 | フォワードスラッシュ前提 |
-| 必須ツール最低バージョン | bash 3.2+ / Python 3.8+ / git 2.0+ / Docker 20.0+ |
+| 必須ツール最低バージョン | Python 3.8+ / git 2.0+ / Docker 20.0+（推奨）。bash 3.2+ は `setup.sh` ラッパー用（`python3 install.py` を直接呼べば不要） |
 
 ### セキュリティ
 
@@ -199,7 +199,7 @@ export GITHUB_PERSONAL_ACCESS_TOKEN="$(secret-tool lookup service github-pat)"
 
 | 項目 | 内容 |
 |---|---|
-| `setup.sh` のログ | 現状維持 |
+| `install.py` のログ | ステップごとに何を変更/追加したかを表示（`--dry-run` で事前確認可） |
 | hook の警告メッセージ | 現状維持 |
 | Stop 通知音 | 現状維持 |
 
@@ -220,7 +220,7 @@ export GITHUB_PERSONAL_ACCESS_TOKEN="$(secret-tool lookup service github-pat)"
 
 | 項目 | 内容 |
 |---|---|
-| 必須ツール | bash 3.2+ / Python 3.8+ / git 2.0+ / Docker 20.0+ |
+| 必須ツール | Python 3.8+ / git 2.0+ / Docker 20.0+。bash 3.2+ は `setup.sh` ラッパー用（任意） |
 | 対応 OS | macOS / Linux（GUI 環境前提・Windows 非対応） |
 | Claude Code 規約 | `~/.claude/` ディレクトリ構造に準拠 |
 | 日本語話者前提 | commands は日本語、コミットメッセージ description も日本語 |
