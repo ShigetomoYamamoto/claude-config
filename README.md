@@ -21,37 +21,41 @@ Claude Code のグローバル設定を管理する dotfiles リポジトリ。
 
 | ディレクトリ/ファイル | 内容 |
 |---|---|
-| `agents/` | 15体のカスタムエージェント（architect, planner, tdd-guide, code-reviewer, requirements-analyst, deploy-runner など） |
-| `commands/` | 23個のスラッシュコマンド（/requirements, /design, /plan, /tdd, /commit, /deploy, /autorun, /verify-loop など） |
+| `agents/` | 17体のカスタムエージェント（architect, planner, tdd-guide, code-reviewer, reviewer, fixer, requirements-analyst, deploy-runner など） |
+| `commands/` | 26個のスラッシュコマンド（/requirements, /design, /plan, /tdd, /commit, /deploy, /autorun, /review-loop, /verify-loop など） |
 | `hooks/` | 品質ガード・安全装置（シークレット検出・doc 生成ブロック・保護ブランチ編集ガード・git 破壊操作ブロック・PR base チェック・大量削除確認） |
 | `rules/` | コーディングスタイル・テスト・セキュリティ・エージェント運用ルール・Claude 使用効率化・自走/並列/メモリのループ運用ルール |
-| `skills/` | 参照スキル（git-workflow, tdd-workflow, security-review） |
+| `skills/` | 参照スキル（loop-engineering, 3-line-contract, git-workflow, tdd-workflow, security-review） |
 | `docs/` | 要件定義・アーキテクチャ・ADR |
 | `settings.json.template` | Claude Code 設定テンプレート（パス自動解決・プラグイン有効化を含む） |
 | `mcp.json` | MCP サーバー設定（GitHub / Playwright / Figma） |
 
 ## ループ自走（Loop Engineering）運用
 
-目的を渡せば検証しながら自走する仕組みを、安全装置（`rules/loop-safety.md`）を核として備えています。
+目的を渡せば検証しながら自走する仕組みを、安全装置（`rules/loop-safety.md`）を核に、5層で備えています。
 
-| 成果物 | 種別 | 役割 |
-|--------|------|------|
-| `rules/loop-safety.md` | ルール | 自走の前提条件・ハードストップ（ターン/時間/トークン上限）・ゴールドリフト対策・不可逆操作の確認 |
-| `commands/autorun.md`（`/autorun`） | コマンド | 完了条件を渡すと達成まで自走。`/goal`・`/loop`・`ScheduleWakeup`・`CronCreate`・`Workflow` を使い分け |
-| `rules/parallel-worktree.md` | ルール | 並列エージェントが書き込み競合する場合の worktree 分離 |
-| `rules/memory.md` | ルール | セッションを跨いで学習を `memory/` に書き戻す（アウターループ） |
-| `commands/verify-loop.md`（`/verify-loop`） | コマンド | レビュー→反証検証→修正→再判定を CRITICAL/HIGH=0 まで自律で回す（`Workflow`） |
+| 層 | 主な成果物 | 役割 |
+|----|-----------|------|
+| **ミクロ実装** | `skills/loop-engineering/`・`commands/review-loop`（+`reviewer`/`fixer`）・`workflows/loop-engineering-large-A.js` | 1タスクを VISION→テスト→レッド/グリーン→レビュー往復→完了判定で完成させる（強さ A/B/C を自動選択） |
+| **マクロ自走** | `commands/autorun`・`docs/adr/007`・`commands/verify-loop` | 要件→設計→実装→PR/デプロイを、関門4点（要件・設計・PR・デプロイ）以外は自動連結 |
+| **安全（横串）** | `rules/loop-safety.md` | 前提条件・ハードストップ・ゴールドリフト・不可逆操作確認（全層が参照する正本） |
+| **メモリ（横串）** | `rules/memory.md` | セッションを跨ぐ学習を `memory/` に書き戻す（アウターループ） |
+| **並列（横串）** | `rules/parallel-worktree.md` | 並列エージェントが書き込み競合する場合の worktree 分離 |
 
 **安全の原則:** ブレーキ（ハードストップ・専用ブランチ・機械的な成功判定）を先に設定してから自走させる。機械的に成功判定できないタスクは自走させない。
 
 **典型的な使い方:**
 
 ```
-# 完了条件まで自走（上限つき）
+# 1つのコード実装をクローズドループで完成（ミクロ）
+「〜を実装して」と頼むと loop-engineering スキルが強さ A/B/C を自動選択
+
+# 完了条件までフロー全体を自走（マクロ・上限つき）
 /autorun tests/ が全 pass し ruff がクリーンになるまで（最大15ターン）
 
-# 変更を CRITICAL/HIGH=0 まで自律レビュー&修正
-/verify-loop
+# レビュー→修正を指摘0まで自律で回す
+/review-loop      # 通常（Claude が reviewer/fixer を回す）
+/verify-loop      # 反証検証つき（自走フローの検証ゲート）
 ```
 
 ## settings.json.template の主な設定
@@ -132,7 +136,7 @@ cd ~/dotfiles/claude-config
 `setup.sh` は以下を行います：
 
 1. **preflight check** — 必須ツール（bash・python3・git・docker）のバージョン確認
-2. `agents/`, `commands/`, `hooks/`, `rules/`, `skills/` を `~/.claude/` にコピー
+2. `agents/`, `commands/`, `hooks/`, `rules/`, `skills/`, `workflows/` を `~/.claude/` にコピー
 3. `settings.json.template` からパスを解決して `~/.claude/settings.json` を生成
 4. `mcp.json` の MCP サーバー設定を `~/.claude.json` にマージ（既存設定は保持し、不足分のみ追加）
 
