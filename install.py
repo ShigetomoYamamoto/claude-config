@@ -31,9 +31,7 @@ Usage:
 """
 
 import json
-import os
 import shutil
-import subprocess
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -72,6 +70,14 @@ def fail(msg):
     sys.exit(1)
 
 
+def fmt_names(names, limit=6):
+    """Join names for display, truncating long lists."""
+    names = [str(n) for n in names]
+    if len(names) <= limit:
+        return ", ".join(names)
+    return ", ".join(names[:limit]) + f" 他{len(names) - limit}件"
+
+
 # ─────────────────────────────────────────────────────────────
 # backup (created lazily, only when something is actually backed up)
 # ─────────────────────────────────────────────────────────────
@@ -93,7 +99,7 @@ class Backup:
             rel = Path(path.name)
         dest = self.root / rel
         if self.dry_run:
-            info(f"would back up {path} -> {dest}")
+            info(f"バックアップ予定: {path} → {dest}")
             self.used = True
             return
         dest.parent.mkdir(parents=True, exist_ok=True)
@@ -108,28 +114,68 @@ class Backup:
 # Step 1: preflight
 # ─────────────────────────────────────────────────────────────
 def preflight():
-    step("[1/4] preflight check")
+    step("[1/4] 事前チェック")
 
     if sys.version_info < (3, 8):
-        fail(f"python {sys.version_info.major}.{sys.version_info.minor} too old (>= 3.8 required)")
+        fail(f"python {sys.version_info.major}.{sys.version_info.minor} は古すぎます（3.8 以上が必要）")
     ok(f"python {sys.version_info.major}.{sys.version_info.minor}")
 
     if shutil.which("git"):
-        ok("git found")
+        ok("git: 検出")
     else:
-        fail("git not found (>= 2.0 required)")
+        fail("git が見つかりません（2.0 以上が必要）")
 
     if shutil.which("docker"):
-        ok("docker found")
+        ok("docker: 検出")
     else:
-        warn("docker not found. GitHub MCP requires Docker (brew install --cask docker on macOS).")
+        warn("docker が見つかりません。GitHub MCP には Docker が必要です（macOS は brew install --cask docker）。")
 
 
 # ─────────────────────────────────────────────────────────────
 # Step 2: symlink static dirs
 # ─────────────────────────────────────────────────────────────
+def dir_content_diff(live_dir, repo_dir):
+    """Compare a live real dir against the repo dir it will link to.
+
+    Returns (added, removed, modified) as lists of relative paths:
+      added    = files the repo has that live lacks -> appear after linking
+      removed  = files live has that the repo lacks -> disappear after linking
+      modified = files in both whose contents differ -> updated to the repo version
+    """
+    def files(root):
+        return {p.relative_to(root): p for p in root.rglob("*") if p.is_file()}
+
+    def differ(a, b):
+        try:
+            return a.read_bytes() != b.read_bytes()
+        except OSError:
+            return True  # unreadable -> treat as modified (never hide a real change)
+
+    live, repo = files(live_dir), files(repo_dir)
+    live_set, repo_set = set(live), set(repo)
+    added = sorted(repo_set - live_set)
+    removed = sorted(live_set - repo_set)
+    modified = sorted(p for p in (live_set & repo_set) if differ(live[p], repo[p]))
+    return added, removed, modified
+
+
+def _report_dir_diff(name, live_dir, repo_dir):
+    """Print what switching this dir from a real copy to a symlink will change."""
+    added, removed, modified = dir_content_diff(live_dir, repo_dir)
+    if not (added or removed or modified):
+        info(f"{name}/ コピー実体 → symlink（中身は repo と同一・実質変化なし）")
+        return
+    info(f"{name}/ コピー実体 → symlink（中身が更新されます）")
+    if modified:
+        info(f"  変更 {len(modified)}: {fmt_names(modified)}")
+    if added:
+        info(f"  追加 {len(added)}: {fmt_names(added)}")
+    if removed:
+        info(f"  消失 {len(removed)}: {fmt_names(removed)}")
+
+
 def link_dirs(dry_run, backup):
-    step("[2/4] linking config directories")
+    step("[2/4] 設定ディレクトリのリンク作成")
 
     for name in STATIC_DIRS:
         src = REPO / name
@@ -138,30 +184,30 @@ def link_dirs(dry_run, backup):
         dst = CLAUDE_DIR / name
 
         if dst.is_symlink() and dst.exists() and dst.resolve() == src.resolve():
-            ok(f"{name}/ (already linked)")
+            ok(f"{name}/ （リンク済み・変化なし）")
             continue
 
         # Replace whatever is there, backing up real dirs first.
         if dst.is_symlink():
             if not dry_run:
                 dst.unlink()
-            info(f"{name}/ (replacing stale symlink)")
+            info(f"{name}/ （古いリンクを repo への symlink に置換）")
         elif dst.is_dir():
+            _report_dir_diff(name, dst, src)
             backup.save(dst)
             if not dry_run:
                 shutil.rmtree(dst)
-            info(f"{name}/ (was a real dir, backed up then linked)")
         elif dst.exists():
             backup.save(dst)
             if not dry_run:
                 dst.unlink()
 
         if dry_run:
-            ok(f"{name}/ -> would link to {src}")
+            ok(f"{name}/ → {src} にリンク予定")
         else:
             CLAUDE_DIR.mkdir(parents=True, exist_ok=True)
             dst.symlink_to(src, target_is_directory=True)
-            ok(f"{name}/ -> {src}")
+            ok(f"{name}/ → {src}")
 
 
 # ─────────────────────────────────────────────────────────────
@@ -219,15 +265,63 @@ def load_template():
     try:
         return json.loads(raw)
     except json.JSONDecodeError as exc:
-        fail(f"settings.json.template is not valid JSON: {exc}")
+        fail(f"settings.json.template が不正な JSON です: {exc}")
+
+
+def _hook_cmds(hooks):
+    """Flatten a hooks dict into a set of (event, short-command) pairs.
+
+    Tolerant of malformed live settings (hand-edited / old schema): any value
+    that isn't the expected shape is skipped rather than crashing.
+    """
+    pairs = set()
+    if not isinstance(hooks, dict):
+        return pairs
+    for event, blocks in hooks.items():
+        if not isinstance(blocks, list):
+            continue
+        for block in blocks:
+            if not isinstance(block, dict):
+                continue
+            for h in block.get("hooks", []):
+                if not isinstance(h, dict):
+                    continue
+                cmd = h.get("command", "")
+                pairs.add((event, cmd.split("/")[-1] if "/" in cmd else cmd))
+    return pairs
+
+
+def report_settings_change(live, merged):
+    """Print exactly which keys are added / changed / unchanged."""
+    added = [k for k in merged if k not in live]
+    changed = [k for k in merged if k in live and merged[k] != live[k]]
+    removed = [k for k in live if k not in merged]  # invariant: should stay empty
+    unchanged = [k for k in merged if k in live and merged[k] == live[k]]
+
+    info(f"追加キー: {', '.join(added) if added else '（なし）'}")
+    info(f"変更キー: {', '.join(changed) if changed else '（なし）'}")
+    if "hooks" in changed:
+        before, after = _hook_cmds(live.get("hooks", {})), _hook_cmds(merged.get("hooks", {}))
+        for event, cmd in sorted(after - before):
+            info(f"  + {event}: {cmd}")
+        for event, cmd in sorted(before - after):
+            info(f"  - {event}: {cmd}")
+    if "permissions" in changed:
+        before = live.get("permissions", {}).get("allow", [])
+        for x in merged.get("permissions", {}).get("allow", []):
+            if x not in before:
+                info(f"  + permissions.allow: {x}")
+    if removed:
+        info(f"⚠ 削除キー（想定外）: {', '.join(removed)}")
+    info(f"変更なし: {', '.join(unchanged) if unchanged else '（なし）'}")
 
 
 def merge_settings(dry_run, backup):
-    step("[3/4] merging settings.json")
+    step("[3/4] settings.json をマージ")
 
     tmpl_path = REPO / "settings.json.template"
     if not tmpl_path.exists():
-        fail("settings.json.template not found")
+        fail("settings.json.template が見つかりません")
 
     template = load_template()
     settings_path = CLAUDE_DIR / "settings.json"
@@ -236,47 +330,42 @@ def merge_settings(dry_run, backup):
         try:
             live = json.loads(settings_path.read_text())
         except json.JSONDecodeError as exc:
-            fail(f"existing settings.json is not valid JSON: {exc}")
+            fail(f"既存の settings.json が不正な JSON です: {exc}")
 
     merged = merge_settings_data(template, live)
 
     if merged == live:
-        ok("settings.json (already up to date)")
+        ok("settings.json （最新のため変更なし）")
+        return
+
+    if dry_run:
+        ok("settings.json （マージ予定。既存キーは保持）")
+        report_settings_change(live, merged)
+        backup.save(settings_path)
         return
 
     backup.save(settings_path)
     text = json.dumps(merged, indent=2, ensure_ascii=False) + "\n"
-
-    if dry_run:
-        ok("settings.json (would merge; live keys preserved)")
-        info(f"keys after merge: {', '.join(merged.keys())}")
-        added = [k for k in merged if k not in live]
-        if added:
-            info(f"added from template: {', '.join(added)}")
-        hooks = merged.get("hooks", {})
-        if hooks:
-            info(f"hook events: {', '.join(hooks.keys())}")
-        return
-
     settings_path.write_text(text)
-    ok("settings.json (merged)")
+    ok("settings.json （マージ完了）")
+    report_settings_change(live, merged)
 
 
 # ─────────────────────────────────────────────────────────────
 # Step 4: merge mcp.json into ~/.claude.json (additive)
 # ─────────────────────────────────────────────────────────────
 def merge_mcp(dry_run):
-    step("[4/4] merging mcpServers into ~/.claude.json")
+    step("[4/4] mcpServers を ~/.claude.json にマージ")
 
     mcp_path = REPO / "mcp.json"
     if not mcp_path.exists():
-        warn("mcp.json not found, skipping")
+        warn("mcp.json が見つからないためスキップ")
         return
 
     try:
         mcp = json.loads(mcp_path.read_text())
     except json.JSONDecodeError as exc:
-        fail(f"mcp.json is not valid JSON: {exc}")
+        fail(f"mcp.json が不正な JSON です: {exc}")
 
     claude_path = Path.home() / ".claude.json"
     claude = {}
@@ -284,24 +373,24 @@ def merge_mcp(dry_run):
         try:
             claude = json.loads(claude_path.read_text())
         except json.JSONDecodeError as exc:
-            fail(f"existing ~/.claude.json is not valid JSON: {exc}")
+            fail(f"既存の ~/.claude.json が不正な JSON です: {exc}")
 
     existing = claude.get("mcpServers", {})
     added = [k for k in mcp.get("mcpServers", {}) if k not in existing]
 
     if not added:
-        ok("already up to date")
+        ok("最新のため変更なし")
         return
 
     if dry_run:
-        ok(f"would add: {', '.join(added)}")
+        ok(f"追加予定: {', '.join(added)}")
         return
 
     for key in added:
         existing[key] = mcp["mcpServers"][key]
     claude["mcpServers"] = existing
     claude_path.write_text(json.dumps(claude, indent=2) + "\n")
-    ok(f"added: {', '.join(added)}")
+    ok(f"追加: {', '.join(added)}")
 
 
 # ─────────────────────────────────────────────────────────────
@@ -311,7 +400,7 @@ def main():
     backup = Backup(dry_run, stamp)
 
     if dry_run:
-        print("DRY RUN — no files will be written.\n")
+        print("DRY RUN — ファイルは一切書き込みません。\n")
 
     preflight()
     CLAUDE_DIR.mkdir(parents=True, exist_ok=True)
@@ -321,11 +410,11 @@ def main():
 
     print("")
     if dry_run:
-        print("Dry run complete. Re-run without --dry-run to apply.")
+        print("dry-run 完了。適用するには --dry-run なしで再実行してください。")
     else:
         if backup.used:
-            print(f"Backup of replaced files: {backup.root}")
-        print(f"Done. Config installed to {CLAUDE_DIR}")
+            print(f"置換したファイルのバックアップ: {backup.root}")
+        print(f"完了。設定を {CLAUDE_DIR} にインストールしました。")
 
 
 if __name__ == "__main__":
