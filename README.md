@@ -26,6 +26,7 @@ Claude Code のグローバル設定を管理する dotfiles リポジトリ。
 | `hooks/` | 品質ガード・安全装置（シークレット検出・doc 生成ブロック・保護ブランチ編集ガード・git 破壊操作ブロック・PR base チェック・大量削除確認） |
 | `rules/` | コーディングスタイル・テスト・セキュリティ・エージェント運用ルール・Claude 使用効率化・自走/並列/メモリのループ運用ルール |
 | `skills/` | 参照スキル（loop-engineering, 3-line-contract, git-workflow, tdd-workflow, security-review） |
+| `workflows/` | オーケストレーション用 Workflow テンプレート（loop-engineering-large-A: 大規模Aの計画→赤確認→実装→検証） |
 | `docs/` | 要件定義・アーキテクチャ・ADR |
 | `settings.json.template` | Claude Code 設定テンプレート（パス自動解決・プラグイン有効化を含む） |
 | `mcp.json` | MCP サーバー設定（GitHub / Playwright / Figma） |
@@ -251,7 +252,7 @@ git pull
 
 ## 拡張方法
 
-新しいエージェント・コマンド・hook・MCP を追加する手順です。追加後は他マシンで `git pull && setup.sh` を実行すれば反映されます。
+新しいエージェント・コマンド・hook・workflow・MCP を追加する手順です。追加後は他マシンで `git pull && setup.sh` を実行すれば反映されます。
 
 ### 新エージェントを追加
 
@@ -275,6 +276,12 @@ git pull
 - 予期せぬエラーは `exit 0`（Claude を止めない）
 - 意図的ブロックのみ `exit 2`
 - ネットワーク通信禁止（ローカル処理のみ）
+
+### 新 workflow を追加
+
+1. `workflows/<name>.js` を作成（Workflow ツールで起動できる JS。`meta` 必須、mode 分岐・引数バリデーションを持たせる）
+2. 起動元のスキル / コマンド（例: `skills/loop-engineering/SKILL.md`）から参照を追記
+3. コミット → 他マシンで `git pull && setup.sh`（`setup.sh` が `workflows/` を無条件コピーするため配線追加は不要）
 
 ### 新 MCP を追加
 
