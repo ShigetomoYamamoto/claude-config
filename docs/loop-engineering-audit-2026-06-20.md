@@ -119,7 +119,7 @@
 | hooks/doc-blocker.py | 物理層(生成抑制) | 残す | 規範のハード化 |
 | hooks/git-add-secret-blocker.py | 物理層(不可逆=漏洩防止) | 残す | 効く/効かない範囲を明示=模範 |
 | hooks/git-destructive-blocker.py | 物理層(不可逆ブロック中核) | 残す | 保護ブランチ/force push/reset --hard 等を exit 2 |
-| hooks/mass-delete-blocker.py | 物理層(警告中心) | 再定義して残す | 大半の rm -rf を止めない。名と実態の不一致(P6) |
+| hooks/mass-delete-blocker.py | 物理層(確認ゲート) | 再定義済み | 非ルートの rm -rf・閾値超ワイルドカード削除を `permissionDecision=ask` で実行前の人間確認に格上げ(ルート/HOME は exit 2 維持)。P6 の未決点を解決 |
 | hooks/pr-base-checker.py | 物理層(PR=外向き) | 残す | develop 強制。MCP 経由は対象外(範囲明示済み) |
 | hooks/protected-branch-edit-guard.py | 物理層(予防) | 残す | 保護ブランチ上の Edit/Write を exit 2 |
 | hooks/secret-detection.py | 物理層(検出・非ブロック) | 再定義して残す | exit 2 なし=検出器。名と層を明示(P6) |
