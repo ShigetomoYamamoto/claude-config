@@ -55,8 +55,8 @@ Claude Code のグローバル設定を管理する dotfiles リポジトリ。
 - `defaultMode: auto` — ほとんどの操作を自動承認
 - `Bash(git *)` / `Bash(gh *)` — どのプロジェクトでも git/gh 操作が確認なしで動作
 - `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: 1` — 複数エージェントの並列実行を有効化
-- `enabledPlugins` — Slack・`commit-commands`・`pr-review-toolkit`・`security-guidance` プラグインを自動有効化（[ADR-012](./docs/adr/012-official-plugins-for-git-review-security.md)）
-- フック: PreToolUse（保護ブランチ編集ガード・doc 生成ブロック・秘匿ファイルのステージ防止・git 破壊操作ブロック・PR base チェック・大量削除確認・コミットメッセージ規約チェック）、PostToolUse（シークレット検出）、Stop / PermissionRequest（音声通知）
+- `enabledPlugins` — Slack・`github`・`commit-commands`・`pr-review-toolkit`・`security-guidance`・`frontend-design` プラグインを自動有効化（[ADR-012](./docs/adr/012-official-plugins-for-git-review-security.md)・[ADR-019](./docs/adr/019-settings-template-scope.md)）
+- フック: PreToolUse（保護ブランチ編集ガード・doc 生成ブロック・秘匿ファイルのステージ防止・git 破壊操作ブロック・PR base チェック・大量削除確認・コミットメッセージ規約チェック）、PostToolUse（シークレット検出）
 
 ## 新しいマシンへのインストール
 
@@ -235,12 +235,12 @@ git pull
 | 種別 | 管理方法 |
 |---|---|
 | MCP サーバー（GitHub / Playwright / Figma） | `mcp.json` → `setup.sh` が `~/.claude.json` にマージ |
-| プラグイン（Slack / commit-commands / pr-review-toolkit / security-guidance） | `settings.json.template` の `enabledPlugins` で有効化。本体は各マシンで `/plugin` から導入 |
+| プラグイン（Slack / github / commit-commands / pr-review-toolkit / security-guidance / frontend-design） | `settings.json.template` の `enabledPlugins` で有効化。本体は各マシンで `/plugin` から導入 |
 
 新しい MCP サーバーを追加した場合は `mcp.json` に追記して `setup.sh` を再実行してください。  
 新しいプラグインを有効化した場合は `settings.json.template` の `enabledPlugins` に追記してください。
 
-> **公式プラグインの導入（各マシンで1回）**: `enabledPlugins` は有効化フラグで、本体は別途導入が必要です。Claude Code 内で `/plugin` を開き、`claude-plugins-official` から `commit-commands`・`pr-review-toolkit`・`security-guidance`（と `slack`）を導入してください。git/レビュー/セキュリティを公式へ寄せた背景は [ADR-012](./docs/adr/012-official-plugins-for-git-review-security.md)。コミット規約・develop ベース PR・保護ブランチ保護などの安全保証は hooks 側が担保するため、薄い公式コマンドでも規律は保たれます。
+> **公式プラグインの導入（各マシンで1回）**: `enabledPlugins` は有効化フラグで、本体は別途導入が必要です。Claude Code 内で `/plugin` を開き、`claude-plugins-official` から `commit-commands`・`pr-review-toolkit`・`security-guidance`・`github`・`frontend-design`（と `slack`）を導入してください。git/レビュー/セキュリティを公式へ寄せた背景は [ADR-012](./docs/adr/012-official-plugins-for-git-review-security.md)。コミット規約・develop ベース PR・保護ブランチ保護などの安全保証は hooks 側が担保するため、薄い公式コマンドでも規律は保たれます。
 
 ## 拡張方法
 

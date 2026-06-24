@@ -80,33 +80,15 @@
           }
         ]
       }
-    ],
-    "Stop": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "command -v afplay > /dev/null 2>&1 && afplay -v 0.2 /System/Library/Sounds/Glass.aiff || printf '\\a'"
-          }
-        ]
-      }
-    ],
-    "PermissionRequest": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "command -v afplay > /dev/null 2>&1 && afplay -v 0.2 /System/Library/Sounds/Ping.aiff || printf '\\a'"
-          }
-        ]
-      }
     ]
   },
   "enabledPlugins": {
     "slack@claude-plugins-official": true,
+    "github@claude-plugins-official": true,
     "commit-commands@claude-plugins-official": true,
     "pr-review-toolkit@claude-plugins-official": true,
-    "security-guidance@claude-plugins-official": true
+    "security-guidance@claude-plugins-official": true,
+    "frontend-design@claude-plugins-official": true
   },
   "extraKnownMarketplaces": {
     "claude-code-plugins": {
@@ -115,9 +97,5 @@
         "repo": "anthropics/claude-code"
       }
     }
-  },
-  "effortLevel": "high",
-  "remoteControlAtStartup": true,
-  "agentPushNotifEnabled": true,
-  "skipAutoPermissionPrompt": true
+  }
 }
