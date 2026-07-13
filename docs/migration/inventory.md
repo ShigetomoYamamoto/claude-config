@@ -80,6 +80,7 @@ repository, bucketed into `core` / `engineering` / `work-agent` / `project-local
 |---|---|---|
 | `docs/adr/*` | core | history retained in core (repo of record) |
 | `docs/autorun-flow.md` | engineering | duplicated into engineering (retired from core) |
+| `docs/loop-engineering-audit-2026-06-20.md` | engineering | retired from core; audits pre-split engineering assets; recover from git history when the engineering repo is populated |
 | `docs/architecture.md` | core | scope updated to reflect the pruned core |
 | `docs/requirements.md` | core | scope updated to reflect the pruned core |
 

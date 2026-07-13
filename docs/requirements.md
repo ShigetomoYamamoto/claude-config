@@ -1,247 +1,119 @@
 # claude-core 要件定義
 
-> **本リポジトリは claude-core foundation です（[ADR-023](./adr/023-three-foundation-split.md)）。**
-> 単一設定を core / engineering / work-agent の3 foundation に分割した結果、この要件定義の
-> 大部分（開発フロー A・品質ガード B の大半・プロジェクト初期化 D・マルチマシン同期 E の
-> symlink 前提）は claude-engineering foundation 側の要件に相当し、まだ core 向けに
-> 分割・書き直しできていません（follow-up）。core としての要件は「安全装置 C の中立部分
-> （シークレット検出・大量削除確認・opus-execution-guard）」「Claude 使用効率化」
-> 「マルチマシン同期は copy 型インストーラ（`installer.py`/`install.py`、symlink 廃止）」
-> に限定されます。詳細な資産分類は [`docs/migration/inventory.md`](./migration/inventory.md) を参照。
+> **本リポジトリは claude-core foundation（ドメイン中立の正本）です（[ADR-023](./adr/023-three-foundation-split.md)）。**
+> 単一設定を core / engineering / work-agent の3 foundation に分割した結果、この要件定義は
+> **claude-core が実際に所有する範囲だけ**を記述します。開発ワークフロー（要件→設計→実装→
+> レビュー→PR→デプロイ、TDD、自走ループ等）の要件は **claude-engineering**、業務/運用
+> ワークフローの要件は **claude-work-agent** が各 foundation 側で所有します。分割前
+> （single-repo）の全体要件は git 履歴と [ADR-023](./adr/023-three-foundation-split.md) に
+> 保存済みのため、本ファイルからは再掲しません。資産の分類は
+> [`docs/migration/inventory.md`](./migration/inventory.md) を参照。
 
-## 1. 上位目的（要望）
+## 1. 上位目的
 
-人間の開発業務を Claude Code が肩代わり・サポートする。
-
-### 2つのモード
-
-| モード | 内容 |
-|---|---|
-| 全自動 | 要件を伝えたら設計・実装・テスト・コミット・PR・デプロイまで完了 |
-| サポート | タスクや課題を渡したら PR まで Claude が進める |
-
-### 人間が関与するポイント
-
-| フェーズ | 関与度 |
-|---|---|
-| 要件確定 | 関門（人が承認） |
-| 設計確定 | 関門（人が承認。不要ならスキップ） |
-| 実装・テスト・検証・コミット | 自動連結 |
-| PR作成 | 関門（人が承認） |
-| デプロイ | 関門（人が承認） |
-
-両モードは `/autorun` が `docs/autorun-flow.md` の遷移定義に従い、**関門4点（要件・設計・PR・デプロイ）以外を自動連結**して実現する（起点・ゴールのパラメータ違い）。安全規律の正本は `rules/loop-safety.md`。
-
-### このリポジトリの位置づけ
-
-上記 2 モードを実現するための「土台・基盤」。
-
----
+claude-core は、Claude Code をどのプロジェクト・どのドメインで使うときも共通して効く
+**ドメイン中立の振る舞い規範と安全装置**を、グローバル `~/.claude` に提供する土台である。
+engineering / work-agent はこの土台の上に、それぞれのドメイン固有ワークフローをプロジェクト
+ローカルに載せる（1プロジェクト=1ドメイン）。core 自身は開発フローも業務フローも持たず、
+「常時ロードされる最小・中立の核」に徹する。ドメイン固有の資産（コマンド・エージェント・
+スタック統合・MCP・資格情報）は一切持たない。
 
 ## 2. 機能要件
 
-> **以下 A〜E は分割前（single-repo 時代）の全体要件をそのまま保持した履歴record。**
-> [ADR-023](./adr/023-three-foundation-split.md) 以降、**A（開発フローの提供）**・
-> **D（プロジェクト初期化）**・**E（マルチマシン同期の symlink 前提部分）** は
-> **claude-engineering foundation** 側の要件に相当し、この repo（claude-core）は所有しない。
-> **B（品質ガード）** も大半（TDD 強制・コードレビュー・ビルド修正・リファクタ等）が同様に
-> engineering 側だが、「Claude 使用効率化」（`rules/claude-efficiency.md`）だけは core が継続所有する。
-> **C（安全装置）** はシークレット検出・大量削除確認・opus-execution-guard・doc-blocker という
-> 中立部分のみ core、それ以外（git 破壊操作防止・PR base チェック等）は engineering。
-> core としての要件の実体は「ドメイン中立 rules（answer-only・collaboration-style・
-> claude-efficiency・memory・role-separation・safety-irreversible・secret-hygiene）＋
-> 上記安全 hook の中立部分＋ copy 型インストーラ（`installer.py`/`install.py`、symlink 廃止）」に
-> 限定される（詳細な資産分類は [`docs/migration/inventory.md`](./migration/inventory.md)）。
-> 以下は書き換えず、分割前の記録としてそのまま残す（新規要件は捏造しない）。
+### A. ドメイン中立の振る舞い規範（rules）
+毎セッション常時ロードされる、スタック非依存の規範を提供する。
 
-### A. 開発フローの提供
+| ルール | 内容 |
+|---|---|
+| `answer-only.md` | 明示依頼まで read-only（投機的な変更をしない） |
+| `collaboration-style.md` | 批判的な相談相手としての振る舞い・回答の形・言語方針 |
+| `claude-efficiency.md` | モデル選択（thinking tier と Sonnet/Haiku の役割分担の前提） |
+| `memory.md` | アウターループ学習（何を永続化するか） |
+| `role-separation.md` | 思考ティアは思考・Sonnet/Haiku は実行。opus-execution-guard で強制 |
+| `safety-irreversible.md` | 不可逆・外向き操作は人間確認、有界な自走、maker≠checker |
+| `secret-hygiene.md` | 秘密情報の基本衛生（環境変数/keychain・.gitignore） |
 
-スタックに依存しない汎用的なフロー・ベース設定・テンプレートをグローバルに提供する。スタック固有の実装（デプロイ先・ビルドコマンドなど）はプロジェクト側に置く。
+### B. ドメイン中立の安全装置（hooks）
+「Claude が規範を忘れたときの保険」となるローカル hook を提供する。
 
-| ステップ | コマンド | エージェント |
+| hook | タイミング | 役割 |
 |---|---|---|
-| 要件分析 | `/requirements` | requirements-analyst |
-| 設計 | `/design` | architect |
-| 計画 | `/plan` | planner |
-| 実装（TDD） | `/tdd` | tdd-guide |
-| ビルド修正 | `/build-fix` | build-error-resolver |
-| リファクタ | `/refactor-clean` | refactor-cleaner |
-| テスト補完 | `/test-coverage` | tdd-guide |
-| E2E | `/e2e` | e2e-runner |
-| レビュー | 公式 `pr-review-toolkit` / `code-review` | code-reviewer（公式） |
-| セキュリティレビュー | 公式 `security-guidance`（hook）＋（自動起動） | security-reviewer（自作・維持） |
-| コミット | `/commit-commands:commit`（公式） | — |
-| PR作成 | `/create-pr`（自作・維持） | — |
-| マイグレーション | `/migrate` | migration-runner |
-| デプロイ（検証・自動ロールバック込み） | `/deploy` | deploy-runner |
-| 手動ロールバック | `/rollback` | rollback-runner |
-| タスク分析 | `/analyze-task` | task-analyst |
-| PR レビュー対応 | `/respond-review` | review-responder |
-| ドキュメント更新 | `/update-docs` | doc-updater |
-| コードマップ更新 | `/update-codemaps` | doc-updater |
-| 自走（フロー全体） | `/autorun`（関門4点以外を自動連結） | autorun-flow に従い各フェーズへ連結 |
-| コード実装の自走 | loop-engineering スキル | reviewer / fixer |
-| レビュー→修正ループ | `/review-loop`・`/review-loop-cross`・`/review-loop-cross-path` | reviewer / fixer |
-| 検証(反証多数決・任意の上位変種) | `/verify-loop`（手動・セキュリティ重点。**自走の verify ゲートは上行の `/review-loop`**） | code-reviewer（公式 pr-review-toolkit）/ security-reviewer（自作） |
+| `opus-execution-guard.py` | PreToolUse(Edit系/Bash) | 思考ティアの編集・変更系 Bash をブロック |
+| `doc-blocker.py` | PreToolUse(Write) | 許可外の新規 .md/.txt 生成を阻止 |
+| `mass-delete-blocker.py` | PreToolUse(Bash) | 再帰/大量削除を確認、ルート/システムは決定的ブロック |
+| `git-add-secret-blocker.py` | PreToolUse(Bash) | 秘匿ファイルの `git add` をブロック |
+| `secret-detection.py` | PostToolUse(Edit系) | ハードコード秘密を検出して警告（非ブロック） |
 
-#### 保留（将来追加候補）
+### C. ドメイン中立のスキル（skills）
 
-| 項目 | 着手条件 |
+| skill | 内容 |
 |---|---|
-| リリースノート / CHANGELOG 生成 | チーム化時（Issue #2） |
-| 依存関係更新 | 既存ツールでカバーできない要求が出たとき（Issue #3） |
-| 環境変数管理 | 複数プロジェクトで共通パターンが見えたとき（Issue #4） |
+| `3-line-contract` | 着手前の3行タスク整形（中立） |
+| `memory-dream` | ナレッジベース棚卸し（中立） |
 
-### B. 品質ガード
+### D. copy 型インストーラとマルチマシン同期
+- `installer.py` + `install.py` が `rules/` `hooks/` `skills/` を `~/.claude` へ**コピー**する（symlink 廃止）。
+- `<target>/.claude-core.manifest.json`（管理ファイル一覧 + sha256）が所有境界。install/update/uninstall/verify は manifest 内かつハッシュ一致のファイルのみ扱い、未知・ローカル改変ファイルは触らない。
+- `settings-fragment.json` を `settings.json` へキー単位マージ（`__TARGET__` を実パス解決。live キー・他 foundation の配線を壊さない）。
+- `--dry-run`・衝突検出・backup・冪等 update を備える。
+- copy 型のため、repo 更新の live 反映には対象マシンで `python3 install.py`（update）の再実行が必要。
 
-| 項目 | 配置 |
-|---|---|
-| テストカバレッジ 80% 以上の強制 | グローバル（`rules/testing.md`） |
-| TDD 強制 | グローバル（`/tdd` + tdd-guide） |
-| コードレビュー | グローバル（公式 `pr-review-toolkit` の code-reviewer。[ADR-012](./adr/012-official-plugins-for-git-review-security.md)） |
-| セキュリティレビュー | グローバル（公式 `security-guidance` hook ＋ 自作 security-reviewer） |
-| コーディングスタイル | グローバル（`rules/coding-style.md`・言語非依存に修正） |
-| Claude 使用効率化 | グローバル（`rules/claude-efficiency.md`） |
-| ビルド・型エラー修正 | グローバル（`/build-fix` + build-error-resolver） |
-| デッドコード削除 | グローバル（`/refactor-clean` + refactor-cleaner） |
-| アクセシビリティチェック | プロジェクト側 |
-| パフォーマンス測定 | プロジェクト側 |
-| 依存ライブラリ脆弱性チェック | Dependabot/Snyk に任せる（実装しない） |
-
-### C. 安全装置
-
-| 項目 | 配置 |
-|---|---|
-| シークレット検出 | グローバル hook（`secret-detection.py` / `git-add-secret-blocker.py`）＋ 公式 `security-guidance`（commit 時 LLM レビュー） |
-| 不要ドキュメント生成のブロック | グローバル hook（`doc-blocker.py`） |
-| git 破壊的操作の防止 | グローバル hook（新規・`git push --force` / `reset --hard` / `clean -fd`） |
-| 大量ファイル削除確認 | グローバル hook（新規） |
-| PR の base ブランチチェック | グローバル hook（新規・base が `develop` 以外でブロック） |
-| デバッグ出力検知（言語別） | プロジェクト側（`/init-autonomous` がスタック検出時に生成） |
-| シークレットファイル誤コミット防止 | `.gitignore` で対応（追加実装不要） |
-| 本番 DB 直接操作の防止 | プロジェクト側 |
-
-### D. プロジェクト初期化
-
-| 項目 | 提供形式 |
-|---|---|
-| プロジェクト基盤生成 | `/init-autonomous` |
-| スタック自動検出 | `/init-autonomous` 内 |
-| 既存資料の取り込み | `/init-autonomous` 内 |
-| プロジェクト側 hook 生成 | `/init-autonomous` がスタック検出時にデバッグ出力検知を生成 |
-| 再初期化コマンド | 実装しない（手動退避 + 再実行で対応） |
-| プロジェクト整合性チェック | 実装しない（YAGNI） |
-| onboarding ドキュメント生成 | 実装しない |
-
-`/init-autonomous` 本体の見直し（テンプレート外出し・新要件対応）は Issue #1 で対応。
-
-### E. マルチマシン同期
-
-> 方式は ADR-009（symlink + 構造マージ）に従う。実装本体は `install.py`、`setup.sh` はその薄いラッパー。
-
-| 項目 | 内容 |
-|---|---|
-| 設定ディレクトリの配置 | `install.py`（`agents/` `commands/` `hooks/` `rules/` `skills/` `workflows/` `templates/` を repo への symlink。`git pull` で即反映） |
-| Claude Code 設定生成 | `install.py`（`settings.json.template` → `~/.claude/settings.json` を FORCE/DEFAULT の2規則で構造マージ。live キーは削除しない） |
-| MCP 設定マージ | `install.py`（`mcp.json` → `~/.claude.json`、不足分のみ追加） |
-| 事前検証（preflight check） | `install.py`（必須ツールが無ければ案内して exit） |
-| バックアップ | 破壊的操作の前に `~/.claude/.backup/<timestamp>/` へ退避 |
-| dry-run モード | `--dry-run`（何も書き込まず変更計画を表示） |
-| マシン固有設定 | 環境変数のみで管理（現状維持） |
-
----
+### 対象外（他 foundation / プロジェクトローカル）
+- 開発ワークフロー一式（コマンド・エージェント・TDD・自走ループ・開発 git hook）→ **claude-engineering**
+- 業務/運用ワークフロー → **claude-work-agent**
+- グローバル MCP・開発/業務プラグインのグローバル有効化・資格情報・ワークスペース ID・スタック統合 → プロジェクトローカル（core は持たない）
 
 ## 3. 非機能要件
-
-> **以下 3〜5 も分割前の全体要件をそのまま保持した履歴record。** `setup.sh` / `mcp.json` /
-> GitHub MCP・PAT・Keychain 連携、および `commands`/`agents` のファイルサイズ上限は
-> claude-engineering 側の要件に相当し、この repo は所有しない。core が継続所有するのは
-> hook の `exit 0`/`exit 2` 方針・シークレット衛生・`rules`/`hooks`/`skills` のファイルサイズ上限・
-> `install.py` の dry-run/ログ方針など、実際に core が持つ仕組みに対応する行のみ
-> （分類は [`docs/migration/inventory.md`](./migration/inventory.md)）。書き換えず、
-> 分割前の記録としてそのまま残す。
 
 ### 信頼性
 
 | 項目 | 内容 |
 |---|---|
-| `install.py`（`setup.sh` 経由）失敗時 | 即停止し、どのステップまで成功したかを表示 |
-| `mcp.json` マージ | 不足分追加方式（既存設定を破壊しない） |
-| hook の予期せぬエラー | exit 0 で Claude の動作を止めない |
-| 意図的なブロック | `doc-blocker.py` のみ exit 2 |
+| `install.py` 失敗時 | 即停止し、どのステップまで成功したかを表示 |
+| settings.json マージ | キー単位追加方式。壊れた JSON のときは触れず警告のみ（live 保護） |
+| hook の予期せぬエラー | `exit 0` で Claude を止めない（[ADR-006](./adr/006-hook-error-policy.md)） |
+| 意図的ブロック | 該当 hook のみ `exit 2`（secret-detection は検出のみで exit 2 なし） |
 
 ### 移植性
 
 | 項目 | 内容 |
 |---|---|
-| 対応 OS | macOS / Linux（Windows は対象外） |
-| パス区切り文字 | フォワードスラッシュ前提 |
-| 必須ツール最低バージョン | Python 3.8+ / git 2.0+。bash 3.2+ は `setup.sh` ラッパー用（`python3 install.py` を直接呼べば不要） |
+| 対応 OS | macOS / Linux（Windows 非対応） |
+| 必須ツール | Python 3.8+ / git 2.0+ |
 
 ### セキュリティ
 
 | 項目 | 内容 |
 |---|---|
-| シークレット混入防止 | `.gitignore` + `secret-detection.py` / `git-add-secret-blocker.py` hook + 公式 `security-guidance`（commit 時 LLM レビュー） |
-| GitHub MCP 認証 | 公式 `github` プラグイン（リモートサーバー + `Authorization: Bearer ${GITHUB_PERSONAL_ACCESS_TOKEN}`）。`mcp.json` では管理しない（[ADR-011](./adr/011-official-github-plugin.md)）|
-| トークン保管 | PAT は OS の Keychain / Keyring に保管し `~/.zprofile` で env 変数へ展開。dotfiles にシークレットを残さない（[ADR-005](./adr/005-keychain-pat.md)）|
-| 禁止事項 | `.git/config` への直書き・`mcp.json` / 設定ファイルへの PAT 直書き |
+| 秘密混入防止 | `.gitignore` + `secret-detection.py` / `git-add-secret-blocker.py` |
+| 秘密の非保存 | memory・ログ・ドキュメントに秘密を書かない（`secret-hygiene.md`） |
 | hook の外部通信 | 禁止（ローカル処理のみ） |
-
-#### GitHub MCP のセットアップ手順
-
-1. PAT を Keychain / Keyring に保管し `~/.zprofile` で `GITHUB_PERSONAL_ACCESS_TOKEN` へ展開する（[ADR-005](./adr/005-keychain-pat.md)）
-2. Claude Code 内で `/plugin` から公式 `github` プラグインを導入する（プラグインが env 変数を読む）
-
-> OAuth 直結は GitHub 側が DCR 非対応のため不成立（[ADR-011](./adr/011-official-github-plugin.md)）。`install.py` はプラグインに関与しない。
 
 ### 保守性
 
 | 項目 | 内容 |
 |---|---|
-| ファイルサイズ上限（commands） | 500 行 |
-| ファイルサイズ上限（agents） | 300 行 |
-| ファイルサイズ上限（rules） | 200 行 |
-| ファイルサイズ上限（skills） | 300 行 |
-| ファイルサイズ上限（hooks） | 100 行 |
+| ファイルサイズ上限 | rules 200行 / skills 300行 / hooks 100行 |
 | 1ファイル1責務 | 明文化 |
-| 重複の禁止 | 同じ情報は1箇所に集約 |
-
-### 拡張性
-
-| 項目 | 内容 |
-|---|---|
-| 新エージェント・新コマンド・新 hook の追加手順 | README に明文化 |
-| 既存の振る舞いを変えない | 新規追加は既存を壊さないこと |
-| レイヤー構造を固定 | Behavior / Workforce / Orchestration（workflows/） / Guardrails / Wiring / Installer |
+| 重複禁止 | 同じ情報は1箇所へ集約。rules は常時ロード＝行数がコンテキストコスト（[ADR-022](./adr/022-autorun-flow-out-of-always-loaded-rules.md)） |
 
 ### 観測性
 
 | 項目 | 内容 |
 |---|---|
-| `install.py` のログ | ステップごとに何を変更/追加したかを表示（`--dry-run` で事前確認可） |
-| hook の警告メッセージ | 現状維持 |
-| Stop 通知音 | 現状維持 |
-
----
+| `install.py` ログ | ステップごとの変更内容を表示（`--dry-run` で事前確認） |
+| hook 警告 | 標準エラーへ簡潔に |
 
 ## 4. 受け入れ基準
 
-形式的なテストシナリオは作らない。
-
-| 項目 | 内容 |
-|---|---|
-| 検証方法 | 日々の運用で気づいた不足・違和感を GitHub Issue として記録 |
-| 改善サイクル | Issue を起点に随時調整 |
-
----
+形式的なテストシナリオは作らない。日々の運用で気づいた不足・違和感を GitHub Issue として記録し、随時調整する。インストーラの単体テストは `tests/` が担保する。
 
 ## 5. 制約・前提条件
 
 | 項目 | 内容 |
 |---|---|
-| 必須ツール | Python 3.8+ / git 2.0+。bash 3.2+ は `setup.sh` ラッパー用（任意） |
+| 必須ツール | Python 3.8+ / git 2.0+ |
 | 対応 OS | macOS / Linux（Windows 非対応） |
 | Claude Code 規約 | `~/.claude/` ディレクトリ構造に準拠 |
-| 日本語話者前提 | commands は日本語、コミットメッセージ description も日本語 |
-| ユーザー数 | 個人利用（将来チーム化を想定） |
+| 言語 | ドキュメント・コミット description は日本語（[ADR-003](./adr/003-language-policy.md) / [ADR-021](./adr/021-language-policy-update.md)）。rules は英語 |
+| 利用形態 | 個人利用（将来チーム化を想定） |
