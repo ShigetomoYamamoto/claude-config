@@ -6,6 +6,8 @@
 
 **部分的に置き換える対象**: [ADR-003](./003-language-policy.md)（rules を英語のみとしていた点。agents=英語 / commands=日本語 は不変）
 
+> **注記（2026-07-16）**: この「主読者で言語を決める」原則を、この repo 内のファイル分類に限らず一般のドキュメント作成の標準ルールへ一般化し、[`rules/doc-language.md`](../../rules/doc-language.md) を新設した（人間向けドキュメント=日本語 / AI 向けドキュメント=英語基調）。本 ADR の決定は不変。
+
 ## コンテキスト
 
 [ADR-003](./003-language-policy.md) は「rules・agents は英語、commands は日本語」とした。しかし運用の実態として、rules には日本語の節が恒常的に増えた（`rules/autorun-flow.md` の Remote CI 節、`rules/git-workflow.md`「コマンドの所在」、`rules/agents.md` の公式委譲・物理層注記、`rules/security.md` の防御層表など）。これらは「モデルへの指示」であると同時に「運用者（日本語話者）が transcript で読み・監査する規範」でもあり、日本語の方が目的に適う箇所だった。2026-07-04 のナレッジベース棚卸しで、ポリシーと実態の乖離として顕在化した。
