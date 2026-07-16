@@ -12,8 +12,8 @@ primary reader" test ADR-021 already applies to this repo's own files.
 
 | Primary reader | Language | Examples |
 |---|---|---|
-| Human (operator / user) | **Japanese** | operator guides, READMEs, requirements docs, procedures / runbooks, replies to the user |
-| AI (model / harness) | **English-based** | CLAUDE.md, code docstrings, prompts to (sub)agents, harness &amp; config |
+| Human (operator / user) | **Japanese** | operator guides, READMEs, requirements docs, procedures / runbooks |
+| AI (model / harness) | **English-based** | CLAUDE.md, code docstrings, prompts to (sub)agents, harness & config |
 
 **English-based, not English-only.** Inside an AI-facing document, a passage
 whose primary reader is a human operator (a safety-norm audit note, an embedded
@@ -23,9 +23,10 @@ is the nuance ADR-021 adopted for `rules/`.
 ## Scope
 
 - This is the **general default for documents you author in a project.**
-- For claude-core's own files the per-category mapping is already fixed by
-  ADR-003 / ADR-021 (`rules/` `agents/` → English-based, `commands/` → Japanese);
-  defer to those here.
+- The config foundations already fix a per-category mapping (ADR-003 / ADR-021:
+  `rules/` `agents/` → English-based, `commands/` → Japanese). Those dirs are
+  spread across claude-core / -engineering / -work-agent (ADR-023); defer to the
+  ADRs there.
 
 ## Relation (cross-reference, don't restate)
 
