@@ -1,51 +1,88 @@
-# Role Separation — Thinking Tier (Fable/Opus) vs Execution (Sonnet/Haiku)
+# Role Separation — Sonnet Default Main Loop, Thinking Tier for Escalation
 
 ## The principle
 
-Split work across models by role: **the thinking tier (Fable 5 / Opus) thinks, Sonnet/Haiku execute.**
+**Default: Sonnet runs the main loop** — routine implementation, investigation, answers,
+and delegation. Reserve the thinking tier (Fable 5 / Opus 4.8) for escalation only,
+when one of these applies:
 
-| | Thinking tier (Fable 5 / Opus 4.8) | Sonnet (5 / 4.6) | Haiku 4.5 |
+- Resolving ambiguous requirements
+- Architecture / foundational decisions
+- Non-obvious or platform-dependent risk
+- Confirming constraints before a destructive/irreversible operation
+- Final approval of a significant change
+
+**Fable is a further escalation, not a default alternative to Opus** — reserve it for
+problems that are indivisible, must be reviewed as a whole in one context, and need
+maximum reasoning depth (e.g. knowledge-base consolidation, system-wide design review).
+
+| | Sonnet (5 / 4.6) — default | Thinking tier (Fable 5 / Opus 4.8) — escalation only | Haiku 4.5 |
 |---|---|---|---|
-| **Best for** | thinking, consultation, research, planning, delegation decisions | editing, deletion, state-changing Bash, repetitive work, tool operations | lightweight agents, worker tasks, frequent calls |
+| **Best for** | main-loop execution: implementation, investigation, answers, orchestrating delegation | the 5 escalation triggers above | lightweight agents, worker tasks, frequent calls |
 
-The point: hand work that does NOT need deep thinking (obvious execution, mechanical repetition, tool operations) to Sonnet/Haiku, and keep the thinking tier on the decisions that actually need judgment. Model performance/cost detail lives in `rules/claude-efficiency.md` (single source of truth — this file defines only the role split).
+After an escalation resolves the judgment call, hand back to Sonnet for execution —
+don't keep running state-changing operations on the escalated model. **Maker ≠
+checker** for significant changes: get independent review (a separate Sonnet session,
+or Opus) rather than self-certifying — see `rules/safety-irreversible.md`. Model
+cost/perf detail and effort tiering live in `rules/claude-efficiency.md` (single
+source of truth — this file defines only the role split).
 
 ## Enforcement: the opus-execution-guard hook
 
-`hooks/opus-execution-guard.py` ([ADR-016](../docs/adr/016-opus-execution-guard.md), scope extended by [ADR-020](../docs/adr/020-thinking-tier-execution-guard.md)) blocks the **main-loop thinking-tier model** from executing state-changing operations:
+`hooks/opus-execution-guard.py` ([ADR-016](../docs/adr/016-opus-execution-guard.md),
+scope extended by [ADR-020](../docs/adr/020-thinking-tier-execution-guard.md), framing
+updated by [ADR-024](../docs/adr/024-sonnet-default-main-loop.md)) enforces the
+hand-back above: it blocks the **active thinking-tier model** from executing
+state-changing operations, whenever it is active — mid-escalation or otherwise:
 
 - **Edit tools**: `Edit` / `Write` / `MultiEdit` / `NotebookEdit`
 - **State-changing Bash** (denylist): `rm` / `mv` / `cp` / `tee` / `mkdir` / `sed -i` / `git add|commit|push|reset|clean` / `npm|pip install` / redirection `>` `>>`, etc.
 
-It reads the active model from the transcript's latest assistant `message.model`; if it is a thinking-tier model (`claude-opus-*` / `claude-fable-*` / `claude-mythos-*`), the operation is blocked with `exit 2`. **Allowed even on the thinking tier**: read-only Bash (`ls`, `cat`, `git status|diff|log`), test/lint/typecheck runs, and `Task` delegation.
+It reads the active model from the transcript's latest assistant `message.model`; if
+it is a thinking-tier model (`claude-opus-*` / `claude-fable-*` / `claude-mythos-*`),
+the operation is blocked with `exit 2`. **Allowed even on the thinking tier**:
+read-only Bash (`ls`, `cat`, `git status|diff|log`), test/lint/typecheck runs, and
+`Task` delegation.
 
-**Always allowed (pass with exit 0):** subagents (stdin carries `agent_id` → treated as the delegated execution layer), Sonnet/Haiku, and any case where the model cannot be determined (fail-open, per [ADR-006](../docs/adr/006-hook-error-policy.md)).
+**Always allowed (pass with exit 0):** subagents (stdin carries `agent_id` → treated
+as the delegated execution layer), Sonnet/Haiku, and any case where the model cannot
+be determined (fail-open, per [ADR-006](../docs/adr/006-hook-error-policy.md)).
+
+The guard's mechanism did not change when the default flipped to Sonnet — only which
+model is normally active did. It still exists to catch the same mistake: a
+thinking-tier session editing directly instead of handing back to Sonnet.
 
 ## Physical-layer scope (do not overstate — aligned with [ADR-014](../docs/adr/014-loop-engineering-as-discipline.md))
 
 The hook fires **only** on Bash and `Edit|Write|MultiEdit|NotebookEdit`. It does **NOT** fire on MCP-routed tool calls (Playwright, repeated MCP ops) or on deploy/migrate/rollback commands. Those are covered by this norm plus the executing agents' `model: sonnet` declaration — never claim the hook guards them.
 
-## Two ways to switch to execution
+## Escalating and returning
 
-1. **Manual** — run `/model sonnet` in the main conversation; switch back with `/model fable` (or `/model opus`).
-2. **Delegation** — hand the edit/change to a Sonnet subagent via `Task` (or pass
-   `model: sonnet` explicitly in the `Task` call). A subagent declaring `model: sonnet`
-   passes the guard's `agent_id` gate. The concrete engineering execution agents
-   (`git-runner`, `executor`, `fixer`, `tdd-guide`, `build-error-resolver`, `e2e-runner`)
-   live in the claude-engineering foundation, not here.
+1. **Escalate** — switch to the thinking tier only for one of the 5 triggers above:
+   `/model opus` (or `/model fable` for the stricter Fable bar).
+2. **Return** — once the judgment call is made, switch back with `/model sonnet`
+   (Sonnet is default, so this is usually just resuming the main conversation).
+3. **Or delegate instead of escalating** — for execution work that doesn't need
+   judgment, hand it to a Sonnet subagent via `Task` (or pass `model: sonnet`
+   explicitly in the call). A subagent declaring `model: sonnet` passes the guard's
+   `agent_id` gate regardless of what the main loop is running. The concrete
+   engineering execution agents (`git-runner`, `executor`, `fixer`, `tdd-guide`,
+   `build-error-resolver`, `e2e-runner`) live in the claude-engineering foundation,
+   not here.
 
-   Do NOT delegate execution to the built-in `general-purpose` / `claude` agent: it
-   inherits the parent (thinking-tier: Fable/Opus) model, so it runs expensive and
+   Do NOT delegate execution to the built-in `general-purpose` / `claude` agent while
+   escalated: it inherits the parent (thinking-tier) model, so it runs expensive and
    off-role (even though the `agent_id` gate would let it through). Use a dedicated
    `model: sonnet` subagent instead.
 
 ## Tool operations
 
-Browser automation and repeated MCP execution belong to Sonnet:
-- **Design** (how to drive it): the thinking tier's judgment.
-- **Execution** (running the steps): delegate to Sonnet, or `/model sonnet`.
+Browser automation and repeated MCP execution belong to Sonnet by default:
+- **Design** (how to drive it): Sonnet, unless one of the 5 escalation triggers applies.
+- **Execution** (running the steps): Sonnet.
 
-Example: design a complex Playwright scenario on the thinking tier (Fable/Opus); run it and reproduce bugs on Sonnet.
+Example: designing a Playwright scenario stays on Sonnet; escalate only if the
+scenario surfaces a non-obvious architecture question.
 
 ## loop-engineering note (engineering foundation only)
 
@@ -56,10 +93,11 @@ not here — this file states only the underlying model-role principle it depend
 
 ## Related
 
-- `rules/claude-efficiency.md` — model performance/cost guidance (single source of truth; do not duplicate here)
-- `rules/safety-irreversible.md` — safety bounds & irreversible-op confirmation (the
+- `rules/claude-efficiency.md` — model performance/cost guidance and effort tiering (single source of truth; do not duplicate here)
+- `rules/safety-irreversible.md` — safety bounds, irreversible-op confirmation, maker≠checker (the
   engineering-specific elaboration, e.g. `/autorun` gates, lives in the
   claude-engineering foundation's `loop-safety.md`, not here)
-- [ADR-016](../docs/adr/016-opus-execution-guard.md) — decision & implementation detail
+- [ADR-016](../docs/adr/016-opus-execution-guard.md) — original guard decision & implementation detail
 - [ADR-020](../docs/adr/020-thinking-tier-execution-guard.md) — guard scope extended to the thinking tier (Fable/Mythos)
+- [ADR-024](../docs/adr/024-sonnet-default-main-loop.md) — default flipped to Sonnet main loop; escalation triggers; guard mechanism unchanged
 - `hooks/opus-execution-guard.py` — implementation

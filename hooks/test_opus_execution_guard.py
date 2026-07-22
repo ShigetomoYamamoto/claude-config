@@ -221,7 +221,7 @@ class OpusExecutionGuardTest(unittest.TestCase):
         t = self.make_transcript([opus_assistant("claude-opus-4-8")])
         proc = run_hook_full("Edit", {"file_path": "/tmp/x.py"}, t)
         self.assertEqual(proc.returncode, 2)
-        self.assertIn("思考ティアのモデル(Opus/Fable)はファイル編集・変更系 Bash 操作を直接実行できません。", proc.stderr)
+        self.assertIn("思考ティア(Opus/Fable)はエスカレーション専用で、ファイル編集・変更系 Bash を直接実行できません。", proc.stderr)
         self.assertEqual(proc.stdout, "")
 
     # --- ケース29: Fable + Edit → ブロック (ADR-020: 思考ティア拡張) ---
