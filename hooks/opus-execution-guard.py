@@ -1,9 +1,14 @@
 #!/usr/bin/env python3
-"""PreToolUse: メインループの思考ティアモデル(Opus / Fable / Mythos)が Edit/Write/変更系 Bash を実行するのをブロックする。
+"""PreToolUse: メインループが思考ティアモデル(Opus / Fable / Mythos)にエスカレーション中、
+Edit/Write/変更系 Bash を実行しようとするのをブロックする。
+
+既定は Sonnet 主ループ(role-separation.md)。本 hook は、稀なエスカレーション時に
+「判断が終わったら実行は Sonnet へ戻す」規律を機械的に強制する安全網であり、
+判定ロジック自体は Opus 主ループ前提だった頃と不変(ADR-024)。
 
 サブエージェント(agent_id あり)・Sonnet/Haiku・監視対象外ツールは通過させる。
 判定不能(transcript 読み取り失敗等)は fail-open(ADR-006)。
-rules/role-separation.md / ADR-016 / ADR-020 参照。
+rules/role-separation.md / ADR-016 / ADR-020 / ADR-024 参照。
 """
 import json, os, sys, re
 
@@ -66,9 +71,9 @@ try:
     if not model or not is_thinking_model(model):
         sys.exit(0)
     if tool in EDIT_TOOLS or (tool == "Bash" and is_mutating_bash(data.get("tool_input", {}).get("command", ""))):
-        print("思考ティアのモデル(Opus/Fable)はファイル編集・変更系 Bash 操作を直接実行できません。", file=sys.stderr)
-        print("`/model sonnet` に切り替えるか、Sonnet サブエージェントに委譲してください。", file=sys.stderr)
-        print("参照: rules/role-separation.md / ADR-016 / ADR-020", file=sys.stderr)
+        print("思考ティア(Opus/Fable)はエスカレーション専用で、ファイル編集・変更系 Bash を直接実行できません。", file=sys.stderr)
+        print("判断が済んだら `/model sonnet` に戻すか、Sonnet サブエージェントに委譲してください。", file=sys.stderr)
+        print("参照: rules/role-separation.md / ADR-016 / ADR-020 / ADR-024", file=sys.stderr)
         sys.exit(2)
     sys.exit(0)
 except SystemExit:
